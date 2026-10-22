@@ -1,0 +1,24 @@
+{
+  "name": "paypal-delight-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["client", "server"],
+  "engines": {
+    "node": ">=22.12.0 <23",
+    "npm": ">=9"
+  },
+  "scripts": {
+    "dev:client": "npm run dev --workspace @paypal-delight/client",
+    "dev:server": "npm run dev --workspace @paypal-delight/server",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "start": "node server/dist/index.js",
+    "preview": "npm run preview --workspace @paypal-delight/client",
+    "test": "npm run test --workspace @paypal-delight/server",
+    "test:smoke": "node --test tests/smoke.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

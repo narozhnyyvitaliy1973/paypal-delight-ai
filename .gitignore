@@ -147,3 +147,9 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Workspace-local npm cache
+.npm-cache/
+
+# Private infrastructure handoff: never publish it with the application
+PAYPAL_DELIGHT_INFRA_HANDOFF*.md
