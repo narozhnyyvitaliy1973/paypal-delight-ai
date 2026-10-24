@@ -813,6 +813,26 @@ footer > span:last-child > span {
 .photo-input { display: grid; gap: 15px; border: 1px solid #b5c3b3; padding: 24px; border-radius: 6px; }
 .photo-input p { margin: 0; line-height: 1.6; }
 .photo-input label { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.gift-options button:not(:disabled) { cursor: pointer; opacity: 1; border: 2px solid #55764b; background: #f0f5e9; }
+.gift-options button:not(:disabled):hover { background: #e4edda; }
+.gift-form, .gift-result { max-width: 760px; margin: 30px auto; }
+.gift-form { padding: clamp(18px, 4vw, 36px); border: 1px solid #b5c3b3; border-radius: 16px; background: #fffdf7; text-align: left; }
+.gift-form h2 { font-size: clamp(24px, 4vw, 34px); margin-top: 0; }
+.gift-fields { display: grid; gap: 18px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.gift-fields label { display: grid; gap: 8px; font-weight: 600; }
+.gift-fields input:not([type=checkbox]), .gift-fields textarea { max-width: 100%; width: 100%; min-width: 0; font: inherit; color: inherit; background: #fff; border: 1px solid #b5c3b3; border-radius: 6px; padding: 12px; }
+.gift-fields textarea { resize: vertical; }
+.gift-fields input[readonly] { background: #f1f3eb; }
+.gift-fields .photo-consent { display: flex; flex-wrap: nowrap; font-weight: 500; }
+.photo-consent input { flex-shrink: 0; width: 18px; height: 18px; }
+.photo-preview { max-width: 100%; width: 160px; height: 160px; object-fit: contain; border-radius: 8px; background: #f1f3eb; }
+.gift-image { display: block; width: 100%; height: auto; max-width: 640px; margin: 24px auto; border-radius: 20px; border: 1px solid #e1d6c8; }
+.download-button { display: inline-flex; gap: 24px; align-items: center; text-decoration: none; }
+.gift-progress { margin: 24px auto; padding: 24px; background: #f0f5e9; border-radius: 14px; }
+.gift-spinner { display: block; margin: 0 auto 12px; width: 48px; font-size: 40px; color: #55764b; animation: gift-turn 3s linear infinite; }
+.return-gift { display: inline-block; margin-top: 20px; }
+@keyframes gift-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .gift-spinner { animation: none; } }
 @media (max-width: 640px) {
   .site-header { gap: 15px; flex-wrap: wrap; padding: 18px 0; }
   .header-actions { gap: 10px; }

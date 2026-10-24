@@ -145,7 +145,7 @@ export async function fixture(t, options = {}) {
   );
   const app = buildApp(
     {},
-    { settings, store, paypal: gateway, rateLimit: options.rateLimit ?? false },
+    { settings, store, paypal: gateway, rateLimit: options.rateLimit ?? false, giftProvider: options.giftProvider },
   );
   t.after(() => app.close());
   const bootstrap = await app.inject("/api/store");

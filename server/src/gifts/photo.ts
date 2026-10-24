@@ -1,13 +1,10 @@
 import sharp, { type OutputInfo } from 'sharp';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { join, dirname, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { AppError } from '../errors.js';
 
 export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 export const PHOTO_MAX_PIXELS = 16_000_000;
 export interface PhotoUpload { bytes: Buffer; contentType: string; consent: boolean }
-export interface PreparedPhoto { path: string; contentType: 'image/png'; width: number; height: number }
+export interface PreparedPhoto { bytes: Buffer; contentType: 'image/png'; width: number; height: number }
 const invalid = () => new AppError(400, 'PHOTO_INVALID', 'Use a valid, single-frame JPEG, PNG or WebP image.');
 
 function signature(bytes: Buffer) {
@@ -17,8 +14,7 @@ function signature(bytes: Buffer) {
   return undefined;
 }
 
-// Internal preparation for the next stage, not an upload endpoint.
-// The original stays in memory; only the re-encoded, metadata-free image reaches disk.
+// Originals and cleaned photos stay in memory; a process crash leaves no photo files.
 export async function withPreparedPhoto<T>(upload: PhotoUpload | undefined, process: (photo?: PreparedPhoto) => Promise<T>): Promise<T> {
   if (!upload) return process();
   if (upload.consent !== true) throw new AppError(400, 'PHOTO_CONSENT_REQUIRED', 'Separate photo consent is required.');
@@ -41,15 +37,10 @@ export async function withPreparedPhoto<T>(upload: PhotoUpload | undefined, proc
     throw invalid();
   }
 
-  const temporaryRoot = resolve(tmpdir());
-  const directory = await mkdtemp(join(temporaryRoot, 'delight-photo-'));
   try {
-    const path = join(directory, 'photo.png');
-    await writeFile(path, cleaned.data, { mode: 0o600, flag: 'wx' });
-    return await process({ path, contentType: 'image/png', width: cleaned.info.width, height: cleaned.info.height });
+    return await process({ bytes: cleaned.data, contentType: 'image/png', width: cleaned.info.width, height: cleaned.info.height });
   } finally {
-    // Delete only our newly-created directory, including when provider processing fails.
-    if (dirname(resolve(directory)) !== temporaryRoot) throw new Error('Unexpected photo temporary directory.');
-    await rm(directory, { recursive: true, force: true });
+    cleaned.data.fill(0);
+    upload.bytes.fill(0);
   }
 }

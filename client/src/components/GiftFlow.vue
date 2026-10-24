@@ -1,0 +1,110 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { api, ApiError, type Order } from '../api';
+import { errorKey } from '../i18n';
+import GiftPhotoInput from './GiftPhotoInput.vue';
+
+const props = defineProps<{ order: Order; productName: string; isDemo: boolean }>();
+const emit = defineEmits<{ update: [order: Order] }>();
+const { t, locale } = useI18n();
+const form = ref(false);
+const submitting = ref(false);
+const wishes = ref('');
+const selection = ref<{ consent: boolean; file?: File }>({ consent: false });
+const error = ref('');
+const result = computed(() => props.order.gift?.result);
+const generating = computed(() => submitting.value || props.order.gift?.status === 'GENERATING');
+let poll: ReturnType<typeof setTimeout> | undefined;
+let disposed = false;
+
+function schedule() {
+  clearTimeout(poll);
+  if (!disposed && props.order.gift?.status === 'GENERATING') poll = setTimeout(() => void refresh(), 1500);
+}
+async function refresh() {
+  try {
+    const order = await api<Order>(`/orders/${props.order.id}/gift`);
+    if (disposed) return;
+    emit('update', order);
+    error.value = '';
+    if (order.gift?.status === 'AVAILABLE') { form.value = true; error.value = 'errors.GIFT_RETRY'; }
+    if (order.gift?.status === 'GENERATING') poll = setTimeout(() => void refresh(), 1500);
+  } catch (cause) { if (!disposed) error.value = errorKey(cause); }
+}
+watch(() => props.order.gift?.status, status => {
+  schedule();
+  // Also release local selections when polling recovers a lost POST response.
+  if (status === 'COMPLETED') { wishes.value = ''; selection.value = { consent: false }; form.value = false; }
+});
+onMounted(schedule);
+onBeforeUnmount(() => { disposed = true; clearTimeout(poll); });
+
+function encode(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.onerror = () => reject(new ApiError('PHOTO_INVALID', ''));
+    reader.readAsDataURL(file);
+  });
+}
+async function create() {
+  if (generating.value || props.order.gift?.status === 'COMPLETED') return;
+  if (selection.value.file && !selection.value.consent) { error.value = 'errors.PHOTO_CONSENT_REQUIRED'; return; }
+  submitting.value = true;
+  error.value = '';
+  try {
+    const file = selection.value.file;
+    const photo = file ? { data: await encode(file), contentType: file.type, consent: selection.value.consent } : undefined;
+    const order = await api<Order>(`/orders/${props.order.id}/gift`, { type: 'caricature', language: locale.value, wishes: wishes.value.trim(), ...(photo ? { photo } : {}) });
+    if (!disposed) {
+      emit('update', order);
+      if (order.gift?.status === 'COMPLETED') { wishes.value = ''; selection.value = { consent: false }; }
+    }
+  } catch (cause) {
+    if (!disposed) {
+      error.value = errorKey(cause);
+      // A lost response may still have committed a result. GET never starts generation.
+      try { emit('update', await api<Order>(`/orders/${props.order.id}/gift`)); } catch { /* Keep the retry action. */ }
+    }
+  } finally { submitting.value = false; }
+}
+</script>
+
+<template>
+  <div class="gift-flow">
+    <div v-if="result" class="gift-result" data-testid="gift-result">
+      <p class="eyebrow">{{ t('gift.readyEyebrow') }}</p>
+      <h2>{{ t('gift.ready') }}</h2>
+      <p v-if="result.isDemo" class="demo-note">{{ t('gift.mockNotice') }}</p>
+      <p v-else>{{ result.text }}</p>
+      <img :src="result.imageUrl" :alt="t(result.isDemo ? 'gift.demoAlt' : 'gift.resultAlt')" :width="result.width" :height="result.height" class="gift-image" />
+      <a class="primary-button download-button" :href="result.downloadUrl" download data-testid="gift-download">{{ t('gift.download') }} <span aria-hidden="true">↓</span></a>
+      <p class="muted">{{ t('gift.saved') }}</p>
+    </div>
+    <template v-else>
+      <div v-if="!form && !generating" class="gift-options">
+        <button type="button" data-testid="choose-caricature" @click="form = true"><span>01</span><strong>{{ t('gift.caricature') }}</strong><small>{{ t('gift.caricatureDescription') }}</small></button>
+        <button disabled><span>02</span><strong>{{ t('gift.greeting') }}</strong><small>{{ t('gift.comingSoon') }}</small></button>
+        <button disabled><span>03</span><strong>{{ t('gift.comic') }}</strong><small>{{ t('gift.comingSoon') }}</small></button>
+      </div>
+      <p v-if="isDemo" class="demo-note">{{ t('gift.mockNotice') }}</p>
+      <form v-if="form" class="gift-form" @submit.prevent="create">
+        <h2>{{ t('gift.formTitle') }}</h2>
+        <fieldset :disabled="generating" class="gift-fields">
+          <label>{{ t('gift.product') }}<input :value="productName" readonly /></label>
+          <label>{{ t('gift.wishes') }}<textarea v-model="wishes" maxlength="500" rows="3" :placeholder="t('gift.wishesPlaceholder')" aria-describedby="wishes-limit" /></label>
+          <p id="wishes-limit" class="muted">{{ t('gift.wishesLimit') }} · {{ wishes.length }}/500</p>
+          <GiftPhotoInput @change="selection = $event" />
+          <button type="submit" class="primary-button" data-testid="create-gift">{{ t('gift.generate') }} <span aria-hidden="true">✦</span></button>
+        </fieldset>
+      </form>
+      <div v-if="generating" class="gift-progress" role="status" aria-live="polite" data-testid="gift-progress">
+        <span class="gift-spinner" aria-hidden="true">✳</span><strong>{{ t('gift.generating') }}</strong><p>{{ t('gift.wait') }}</p>
+      </div>
+      <div v-if="error" class="notice" role="alert">
+        <p>{{ t(error) }}</p><button type="button" class="text-button" :disabled="submitting" @click="refresh">{{ t('gift.check') }}</button>
+      </div>
+    </template>
+  </div>
+</template>

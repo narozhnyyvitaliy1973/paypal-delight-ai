@@ -105,7 +105,7 @@ test("approved capture persists verified IDs and one gift; all repeat processing
   f.store.complete(order.id, paid.captureId);
   assert.equal(
     (await f.get(`/orders/${order.id}/gift`)).json().gift.status,
-    "GENERATED",
+    "COMPLETED",
   );
 });
 

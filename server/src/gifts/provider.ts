@@ -10,7 +10,7 @@ export interface GiftRequest {
   product: { id: string; name: string };
   language: GiftLanguage;
   wishes: string;
-  // Only a validated, metadata-free temporary file; never the original upload.
+  // Only validated, metadata-free, request-scoped bytes; never the original upload.
   photo?: PreparedPhoto;
 }
 export interface GiftResult {

@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from 'vue-i18n';
 import { errorKey, setLocale, type Locale } from './i18n';
 import LegalPage from './components/LegalPage.vue';
+import GiftFlow from './components/GiftFlow.vue';
 import {
   api,
   ApiError,
@@ -28,6 +29,7 @@ const store = ref<Store>();
 const selected = ref<Product>();
 const order = ref<Order>();
 const celebration = ref<Order>();
+const lastGiftOrder = ref('');
 const busy = ref(false);
 const loading = ref(true);
 const message = ref("");
@@ -94,6 +96,8 @@ async function acceptOrder(value: Order) {
     if (confirmed.status !== "COMPLETED" || !confirmed.gift)
       throw new ApiError('PAYMENT_REQUIRED', '');
     celebration.value = confirmed;
+    lastGiftOrder.value = value.id;
+    try { sessionStorage.setItem('delight-last-gift-order', value.id); } catch { /* Optional shortcut. */ }
     message.value = "";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -268,6 +272,8 @@ async function loadStore() {
   try {
     store.value = await api<Store>("/store");
     try {
+      const last = sessionStorage.getItem('delight-last-gift-order') ?? '';
+      if (/^[a-f0-9-]{36}$/.test(last)) lastGiftOrder.value = last;
       const saved = JSON.parse(
         sessionStorage.getItem("delight-checkout") ?? "null",
       );
@@ -363,27 +369,11 @@ onMounted(() => { if (!legalPage) void loadStore(); });
         <div class="gift-banner">
           <span aria-hidden="true">✦</span>
           <div>
-            <strong>{{ t(celebration.gift?.status === 'AVAILABLE' ? 'celebrate.available' : celebration.gift?.status === 'GENERATED' ? 'celebrate.generated' : 'celebrate.reserved') }}</strong>
+            <strong>{{ t(celebration.gift?.status === 'AVAILABLE' ? 'celebrate.available' : celebration.gift?.status === 'COMPLETED' ? 'celebrate.generated' : 'celebrate.reserved') }}</strong>
             <p>{{ t('celebrate.one') }}</p>
           </div>
         </div>
-        <div class="gift-options">
-          <button disabled>
-            <span>01</span><strong>{{ t('gift.caricature') }}</strong
-            ><small>{{ t('gift.caricatureDescription') }}</small>
-          </button>
-          <button disabled>
-            <span>02</span><strong>{{ t('gift.greeting') }}</strong
-            ><small>{{ t('gift.greetingDescription') }}</small>
-          </button>
-          <button disabled>
-            <span>03</span><strong>{{ t('gift.comic') }}</strong
-            ><small>{{ t('gift.comicDescription') }}</small>
-          </button>
-        </div>
-        <p class="muted">
-          {{ t('celebrate.next') }}
-        </p>
+        <GiftFlow :key="celebration.id" :order="celebration" :product-name="productName(celebration.product)" :is-demo="store?.gifts.isDemo ?? true" @update="celebration = $event" />
         <details class="receipt">
           <summary>{{ t('celebrate.receipt') }}</summary>
           <dl>
@@ -402,6 +392,7 @@ onMounted(() => { if (!legalPage) void loadStore(); });
         </button>
       </section>
       <template v-else>
+        <a v-if="lastGiftOrder" :href="`/?order=${lastGiftOrder}`" class="return-gift">{{ t('gift.return') }} ↗</a>
         <section class="hero">
           <div>
             <p class="eyebrow">{{ t('hero.eyebrow') }}</p>

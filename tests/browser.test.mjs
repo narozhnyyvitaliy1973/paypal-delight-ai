@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { existsSync, mkdirSync } from "node:fs";
+import { readFile } from 'node:fs/promises';
+import sharp from 'sharp';
+import { MockGiftProvider } from '../server/dist/gifts/provider.js';
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { preview, createServer } from "vite";
@@ -156,7 +159,7 @@ test(
         );
         assert.equal(
           await f.page.locator(".gift-options button:disabled").count(),
-          3,
+          2,
         );
         await f.page.screenshot({
           path: `${screenshots}/purchase-success.png`,
@@ -171,7 +174,7 @@ test(
             .n,
           1,
         );
-        const stranger = await browser.newContext();
+        const stranger = await browser.newContext({ locale: 'en-US' });
         try {
           const page = await stranger.newPage();
           await page.route("https://**/*", (route) => route.abort());
@@ -304,7 +307,7 @@ test(
       await pay(f.page);
       await f.page.getByRole('heading', { name: 'Feiere deinen Einkauf!' }).waitFor();
       assert.match(await f.page.locator('.celebration-copy').textContent(), /Morgensonne-Tasse/);
-      assert.equal(await f.page.locator('.gift-options button:disabled').count(), 3);
+      assert.equal(await f.page.locator('.gift-options button:disabled').count(), 2);
       await f.page.getByText('Dein persönliches KI-Geschenk ist verfügbar.', { exact: true }).waitFor();
       await f.page.screenshot({ path: `${screenshots}/celebrate-de.png`, fullPage: true });
       await language.selectOption('en');
@@ -337,7 +340,7 @@ test(
       await f.page.getByRole('heading', { name: 'Legal Notice', exact: true }).waitFor();
       await f.page.getByRole('link', { name: 'Privacy Policy', exact: true }).click();
       await f.page.getByRole('heading', { name: 'Privacy Policy', exact: true }).waitFor();
-      assert.match(await f.page.locator('.legal-page').textContent(), /No personalised gift result/);
+      assert.match(await f.page.locator('.legal-page').textContent(), /Photos and wishes are not retained/);
       await f.page.reload();
       assert.equal(await f.page.getByTestId('language-switch').inputValue(), 'en');
       assert.deepEqual(outgoing, []);
@@ -377,6 +380,141 @@ test(
       assert.equal(f.sandbox.orders.size, 0);
     });
 
+    await t.test('gift without photo: double submit, progress, PNG download, reload and return from store', async t => {
+      let release, calls = 0;
+      const gate = new Promise(resolve => { release = resolve; });
+      t.after(() => release());
+      const mock = new MockGiftProvider();
+      const f = await pageFixture(t, 'approve', { fixture: { giftProvider: { name: 'mock', generate: async input => { calls++; await gate; return mock.generate(input); } } } });
+      await pay(f.page); await success(f.page).waitFor();
+      await f.page.getByTestId('choose-caricature').click();
+      assert.equal(await f.page.getByLabel('Your purchased product').inputValue(), 'Daybreak Mug');
+      assert.equal(await f.page.getByRole('checkbox').isChecked(), false);
+      assert.equal(await f.page.locator('input[type=file]').isDisabled(), true);
+      await f.page.getByLabel('Your wishes (optional)').fill('A bright morning');
+      await f.page.screenshot({ path: `${screenshots}/gift-form-en.png`, fullPage: true });
+      const requests = [];
+      f.page.on('request', r => { if (r.method() === 'POST' && r.url().endsWith('/gift')) requests.push(r); });
+      await f.page.locator('.gift-form').evaluate(form => {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      await f.page.getByTestId('gift-progress').waitFor();
+      assert.equal(await f.page.getByTestId('create-gift').isDisabled(), true);
+      release();
+      await f.page.getByTestId('gift-result').waitFor();
+      assert.equal(requests.length, 1); assert.equal(calls, 1);
+      const image = f.page.locator('.gift-image');
+      await image.evaluate(img => img.decode());
+      const downloaded = f.page.waitForEvent('download');
+      await f.page.getByTestId('gift-download').click();
+      const download = await downloaded;
+      assert.match(download.suggestedFilename(), /^delight-caricature-[a-f0-9-]+\.png$/);
+      assert.deepEqual(await readFile(await download.path()), await readFile(new URL('../server/dist/assets/mock-caricature.png', import.meta.url)));
+      await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
+      await f.page.getByRole('button', { name: 'Back to the store' }).click();
+      await f.page.getByRole('link', { name: 'Return to your latest gift' }).click();
+      await f.page.getByTestId('gift-result').waitFor();
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await f.page.screenshot({ path: `${screenshots}/gift-result-mobile.png`, fullPage: true });
+      assert.equal(calls, 1); assert.equal(f.sandbox.captureKeys.length, 1);
+      assert.deepEqual(f.errors, []);
+    });
+
+    await t.test('German photo flow, consent withdrawal, preview, metadata removal and bilingual result', async t => {
+      const mock = new MockGiftProvider();
+      let observed, clean;
+      const f = await pageFixture(t, 'approve', { locale: 'de-DE', fixture: { giftProvider: { name: 'mock', generate: async input => {
+        observed = input; clean = input.photo.bytes;
+        assert.equal((await sharp(clean).metadata()).exif, undefined);
+        return mock.generate(input);
+      } } } });
+      const outgoing = [];
+      f.page.on('request', r => { if (r.url().startsWith('https://')) outgoing.push(r.url()); });
+      await pay(f.page); await f.page.getByTestId('choose-caricature').click();
+      await f.page.getByLabel('Deine Wünsche (optional)').fill('Ein heller Morgen');
+      assert.equal(await f.page.getByLabel('Deine Wünsche (optional)').getAttribute('maxlength'), '500');
+      const consent = f.page.getByRole('checkbox');
+      assert.equal(await consent.isChecked(), false);
+      const input = f.page.locator('input[type=file]');
+      assert.equal(await input.isDisabled(), true);
+      const photo = await sharp({ create: { width: 40, height: 40, channels: 3, background: '#c97954' } }).withExif({ IFD0: { Artist: 'test private data' } }).jpeg().toBuffer();
+      await consent.check();
+      await input.setInputFiles({ name: 'portrait.jpg', mimeType: 'image/jpeg', buffer: photo });
+      await f.page.locator('.photo-preview').evaluate(img => img.decode());
+      await consent.uncheck();
+      assert.equal(await f.page.locator('.photo-preview').count(), 0);
+      assert.equal(await input.inputValue(), '');
+      await consent.check();
+      await input.setInputFiles({ name: 'portrait.jpg', mimeType: 'image/jpeg', buffer: photo });
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await f.page.screenshot({ path: `${screenshots}/gift-form-de-mobile.png`, fullPage: true });
+      await f.page.getByTestId('create-gift').click();
+      await f.page.getByRole('heading', { name: 'Dein Geschenk ist fertig!' }).waitFor();
+      assert.equal(observed.language, 'de'); assert.equal(observed.wishes, 'Ein heller Morgen');
+      assert.ok(clean.every(byte => byte === 0));
+      await f.page.getByTestId('language-switch').selectOption('en');
+      await f.page.getByRole('heading', { name: 'Your gift is ready!' }).waitFor();
+      await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
+      assert.match(await f.page.locator('.gift-result').innerText(), /same prepared illustration/);
+      assert.ok(outgoing.every(url => new URL(url).hostname === 'www.sandbox.paypal.com'));
+      assert.deepEqual(f.errors, []);
+    });
+
+    await t.test('generation error keeps the right; localised retry creates one saved result', async t => {
+      let calls = 0;
+      const mock = new MockGiftProvider();
+      const f = await pageFixture(t, 'approve', { fixture: { giftProvider: { name: 'mock', generate: async input => {
+        if (++calls === 1) throw new Error('simulated provider failure'); return mock.generate(input);
+      } } } });
+      await pay(f.page); await f.page.getByTestId('choose-caricature').click();
+      await f.page.getByTestId('create-gift').click();
+      await f.page.getByText('Gift creation failed. Your right is still available. Please try again.', { exact: true }).waitFor();
+      const id = new URL(f.page.url()).searchParams.get('order');
+      assert.equal(f.store.gift(id).status, 'AVAILABLE');
+      await f.page.getByTestId('language-switch').selectOption('de');
+      await f.page.getByText('Die Geschenkerstellung ist fehlgeschlagen. Dein Anspruch bleibt verfügbar. Versuche es erneut.', { exact: true }).waitFor();
+      await f.page.getByTestId('create-gift').click();
+      await f.page.getByTestId('gift-result').waitFor();
+      assert.equal(calls, 2); assert.equal(f.store.gift(id).status, 'COMPLETED');
+      assert.deepEqual(f.errors, []);
+    });
+
+    await t.test('lost gift response recovers saved result without another generation', async t => {
+      let calls = 0;
+      const mock = new MockGiftProvider();
+      const f = await pageFixture(t, 'approve', { fixture: { giftProvider: { name: 'mock', generate: async input => { calls++; return mock.generate(input); } } } });
+      await pay(f.page); await f.page.getByTestId('choose-caricature').click();
+      await f.page.route('**/api/orders/*/gift', async route => {
+        if (route.request().method() !== 'POST') return route.continue();
+        const response = await route.fetch();
+        assert.equal(response.status(), 200);
+        await route.abort('failed');
+      });
+      await f.page.getByTestId('create-gift').click();
+      await f.page.getByTestId('gift-result').waitFor();
+      assert.equal(calls, 1);
+      await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
+      assert.equal(calls, 1); assert.deepEqual(f.errors, []);
+    });
+
+    await t.test('refresh while generating restores progress and polls the saved result', async t => {
+      let release;
+      const gate = new Promise(resolve => { release = resolve; });
+      t.after(() => release());
+      const mock = new MockGiftProvider();
+      const f = await pageFixture(t, 'approve', { fixture: { giftProvider: { name: 'mock', generate: async input => { await gate; return mock.generate(input); } } } });
+      await pay(f.page); await f.page.getByTestId('choose-caricature').click();
+      await f.page.getByTestId('create-gift').click();
+      await f.page.getByTestId('gift-progress').waitFor();
+      await f.page.reload();
+      await f.page.getByTestId('gift-progress').waitFor();
+      release(); await f.page.getByTestId('gift-result').waitFor();
+      assert.deepEqual(f.errors, []);
+    });
+
     await t.test('prepared photo component requires consent, permits withdrawal and makes no upload', async t => {
       const dev = await createServer({
         root: fileURLToPath(new URL('../client', import.meta.url)),
@@ -401,7 +539,7 @@ test(
       const page = await context.newPage();
       const posts = [];
       page.on('request', r => { if (r.method() === 'POST') posts.push(r.url()); });
-      // Test-only harness: the photo form is intentionally absent from the customer flow in 3A.
+      // Isolate selection/withdrawal: the component itself never uploads a file.
       await page.route('**/photo-component-test', route => route.fulfill({ contentType: 'text/html', body: '<div id="app"></div><script type="module" src="/@id/__x00__photo-test"></script>' }));
       await page.goto(`http://127.0.0.1:${dev.httpServer.address().port}/photo-component-test`);
       const consent = page.getByRole('checkbox');
@@ -410,7 +548,7 @@ test(
       assert.equal(await consent.isChecked(), false);
       assert.equal(await input.isDisabled(), true);
       await consent.check();
-      await input.setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from('local selection only') });
+      await input.setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: await readFile(new URL('../server/dist/assets/mock-caricature.png', import.meta.url)) });
       await page.getByText('Foto ausgewählt', { exact: true }).waitFor();
       await consent.uncheck();
       assert.equal(await input.inputValue(), '');

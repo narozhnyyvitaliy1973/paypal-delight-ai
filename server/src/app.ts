@@ -9,13 +9,15 @@ import { PayPalClient, type PayPalGateway } from "./paypal.js";
 import { Checkout } from "./checkout.js";
 import { AppError, PayPalError } from "./errors.js";
 import { products } from "./catalog.js";
-import { createGiftProvider } from './gifts/provider.js';
+import { createGiftProvider, type GiftProvider } from './gifts/provider.js';
+import { Gifts, type CreateGift } from './gifts/service.js';
 
 interface Dependencies {
   settings?: Settings;
   store?: OrderStore;
   paypal?: PayPalGateway;
   rateLimit?: boolean;
+  giftProvider?: GiftProvider;
 }
 const uuid = {
   type: "string",
@@ -34,12 +36,13 @@ export function buildApp(
   dependencies: Dependencies = {},
 ) {
   const settings = dependencies.settings ?? readSettings();
-  const giftProvider = createGiftProvider(settings.aiProvider);
+  const giftProvider = dependencies.giftProvider ?? createGiftProvider(settings.aiProvider);
   const store = dependencies.store ?? new OrderStore(settings.databasePath);
   const paypal =
     dependencies.paypal ??
     new PayPalClient(settings.clientId, settings.clientSecret, settings.origin);
   const checkout = new Checkout(store, paypal);
+  const gifts = new Gifts(store, giftProvider);
   const enabled = Boolean(settings.clientId && settings.clientSecret);
   const app = Fastify({
     ...options,
@@ -146,6 +149,7 @@ export function buildApp(
       );
       return {
         products,
+        gifts: { isDemo: giftProvider.name === 'mock' },
         checkout: {
           enabled,
           clientId: enabled ? settings.clientId : null,
@@ -213,17 +217,34 @@ export function buildApp(
     app.get<{ Params: { id: string } }>(
       "/api/orders/:id/gift",
       { schema: { params } },
-      async (request) => {
-        const order = store.owned(request.params.id, owner(request));
-        if (order.status !== "COMPLETED" || !store.gift(order.id))
-          throw new AppError(
-            409,
-            "PAYMENT_REQUIRED",
-            "A confirmed purchase is required for a gift.",
-          );
-        return store.publicOrder(order);
-      },
+      async request => gifts.read(owner(request), request.params.id),
     );
+    app.post<{ Params: { id: string }; Body: CreateGift }>('/api/orders/:id/gift', {
+      // Base64 overhead for a maximum 5 MiB photo; all payment routes retain 4 KiB.
+      bodyLimit: 7 * 1024 * 1024,
+      config: { rateLimit: limits },
+      schema: { params, body: {
+        type: 'object', additionalProperties: false, required: ['type', 'language', 'wishes'],
+        properties: {
+          type: { const: 'caricature' }, language: { type: 'string', enum: ['en', 'de'] },
+          wishes: { type: 'string', maxLength: 500 },
+          photo: { type: 'object', additionalProperties: false, required: ['data', 'contentType', 'consent'], properties: {
+            data: { type: 'string', minLength: 1, maxLength: 6990508 },
+            contentType: { type: 'string', enum: ['image/jpeg', 'image/png', 'image/webp'] }, consent: { type: 'boolean' },
+          } },
+        },
+      } },
+    }, async (request, reply) => {
+      const order = await gifts.create(owner(request), request.params.id, request.body);
+      if (order.gift?.status === 'GENERATING') reply.code(202);
+      return order;
+    });
+    for (const action of ['image', 'download'] as const) {
+      app.get<{ Params: { id: string } }>(`/api/orders/:id/gift/${action}`, { schema: { params } }, async (request, reply) => {
+        const bytes = gifts.image(owner(request), request.params.id);
+        return reply.type('image/png').header('Content-Disposition', `${action === 'download' ? 'attachment' : 'inline'}; filename="delight-caricature-${request.params.id}.png"`).send(bytes);
+      });
+    }
   });
   return app;
 }

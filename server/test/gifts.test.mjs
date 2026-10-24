@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile, readdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { createGiftProvider } from '../dist/gifts/provider.js';
 import { withPreparedPhoto, PHOTO_MAX_BYTES } from '../dist/gifts/photo.js';
@@ -54,15 +53,15 @@ test('photos are optional; consent is mandatory and checked before any processin
   assert.equal(called, false);
 });
 
-test('JPEG, PNG and WebP are decoded, metadata stripped, and temporary files deleted', async () => {
+test('JPEG, PNG and WebP are decoded, metadata stripped, and request buffers cleared without files', async () => {
   for (const format of ['jpeg', 'png', 'webp']) {
     const original = await sharp(await image()).withExif({ IFD0: { Artist: 'Private name', ImageDescription: 'Private location' } }).toFormat(format).toBuffer();
     assert.ok((await sharp(original).metadata()).exif);
     let temporary;
     await withPreparedPhoto({ bytes: original, contentType: `image/${format}`, consent: true }, async photo => {
-      temporary = photo.path;
-      assert.deepEqual(await readdir(dirname(photo.path)), ['photo.png']);
-      const clean = await readFile(photo.path);
+      temporary = photo.bytes;
+      assert.equal(photo.path, undefined);
+      const clean = photo.bytes;
       const metadata = await sharp(clean).metadata();
       assert.equal(metadata.format, 'png');
       assert.equal(metadata.exif, undefined); assert.equal(metadata.xmp, undefined);
@@ -70,18 +69,18 @@ test('JPEG, PNG and WebP are decoded, metadata stripped, and temporary files del
       assert.ok(!clean.includes(Buffer.from('Private name')));
       assert.equal(photo.width, 80); assert.equal(photo.height, 40);
     });
-    await assert.rejects(readFile(temporary), { code: 'ENOENT' });
-    await assert.rejects(readdir(dirname(temporary)), { code: 'ENOENT' });
+    assert.ok(temporary.every(byte => byte === 0));
+    assert.ok(original.every(byte => byte === 0));
   }
 });
 
-test('provider failure also deletes the temporary photo', async () => {
-  let path;
+test('provider failure also clears the prepared photo buffer', async () => {
+  let bytes;
   await assert.rejects(withPreparedPhoto({ bytes: await image(), contentType: 'image/png', consent: true }, async photo => {
-    path = photo.path;
+    bytes = photo.bytes;
     throw new Error('provider failed');
   }), /provider failed/);
-  await assert.rejects(readFile(path), { code: 'ENOENT' });
+  assert.ok(bytes.every(byte => byte === 0));
 });
 
 test('photo validation rejects oversized, corrupt, disguised, unsupported and animated images', async () => {

@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
-// Prepared for the next stage. This component never performs a network request.
+// Selection and preview only. The parent submits the file after explicit creation.
 const emit = defineEmits<{ change: [selection: { consent: boolean; file?: File }] }>();
 const { t } = useI18n();
 const consent = ref(false);
 const file = ref<File>();
 const input = ref<HTMLInputElement>();
 const error = ref('');
+const preview = ref('');
+watch(file, value => {
+  if (preview.value) URL.revokeObjectURL(preview.value);
+  preview.value = value ? URL.createObjectURL(value) : '';
+});
+onBeforeUnmount(() => { if (preview.value) URL.revokeObjectURL(preview.value); });
 function clearFile() {
   file.value = undefined;
   if (input.value) input.value.value = '';
@@ -46,6 +52,7 @@ function withoutPhoto() {
       <input ref="input" type="file" accept="image/jpeg,image/png,image/webp" :disabled="!consent" aria-describedby="photo-limits" @change="choose" />
     </label>
     <p v-if="file" role="status">{{ t('photo.selected') }}</p>
+    <img v-if="preview" :src="preview" :alt="t('photo.preview')" class="photo-preview" />
     <p v-if="error" role="alert">{{ t(error) }}</p>
     <button type="button" class="text-button" @click="withoutPhoto">{{ t('photo.without') }}</button>
   </fieldset>

@@ -11,6 +11,7 @@ export interface Product {
 }
 export interface Store {
   products: Product[];
+  gifts: { isDemo: boolean };
   checkout: {
     enabled: boolean;
     clientId: string | null;
@@ -34,7 +35,10 @@ export interface Order {
   paypalOrderId: string | null;
   captureId: string | null;
   captureAttempted: boolean;
-  gift: { id: string; status: "AVAILABLE" | "RESERVED" | "GENERATED" } | null;
+  gift: { id: string; status: 'AVAILABLE' | 'GENERATING' | 'COMPLETED'; result: null | {
+    type: 'caricature'; language: 'en' | 'de'; provider: 'mock' | 'openai'; isDemo: boolean;
+    text: string; width: number; height: number; createdAt: number; imageUrl: string; downloadUrl: string;
+  } } | null;
 }
 export class ApiError extends Error {
   constructor(
