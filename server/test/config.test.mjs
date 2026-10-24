@@ -3,6 +3,12 @@ import test from "node:test";
 import { readConfig, readSettings, repositoryRoot } from "../dist/config.js";
 import { resolve } from "node:path";
 
+test('gift configuration defaults to mock and never accepts an unknown provider', () => {
+  assert.equal(readSettings({}).aiProvider, 'mock');
+  assert.equal(readSettings({ AI_PROVIDER: 'openai' }).aiProvider, 'openai');
+  assert.throws(() => readSettings({ AI_PROVIDER: 'unknown' }), /AI_PROVIDER/);
+});
+
 test("configuration defaults to the loopback address and default port", () => {
   assert.deepEqual(readConfig({}), { host: "127.0.0.1", port: 8003 });
 });

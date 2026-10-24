@@ -1,0 +1,55 @@
+import sharp, { type OutputInfo } from 'sharp';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { join, dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AppError } from '../errors.js';
+
+export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+export const PHOTO_MAX_PIXELS = 16_000_000;
+export interface PhotoUpload { bytes: Buffer; contentType: string; consent: boolean }
+export interface PreparedPhoto { path: string; contentType: 'image/png'; width: number; height: number }
+const invalid = () => new AppError(400, 'PHOTO_INVALID', 'Use a valid, single-frame JPEG, PNG or WebP image.');
+
+function signature(bytes: Buffer) {
+  if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'png';
+  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return 'jpeg';
+  if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  return undefined;
+}
+
+// Internal preparation for the next stage, not an upload endpoint.
+// The original stays in memory; only the re-encoded, metadata-free image reaches disk.
+export async function withPreparedPhoto<T>(upload: PhotoUpload | undefined, process: (photo?: PreparedPhoto) => Promise<T>): Promise<T> {
+  if (!upload) return process();
+  if (upload.consent !== true) throw new AppError(400, 'PHOTO_CONSENT_REQUIRED', 'Separate photo consent is required.');
+  if (!Buffer.isBuffer(upload.bytes) || upload.bytes.length === 0) throw invalid();
+  if (upload.bytes.length > PHOTO_MAX_BYTES) throw new AppError(413, 'PHOTO_TOO_LARGE', 'Photo exceeds the size limit.');
+  const format = signature(upload.bytes);
+  if (!format || upload.contentType !== `image/${format}`) throw invalid();
+
+  let cleaned: { data: Buffer; info: OutputInfo };
+  try {
+    const image = sharp(upload.bytes, { limitInputPixels: PHOTO_MAX_PIXELS, failOn: 'warning' });
+    const metadata = await image.metadata();
+    if (metadata.format !== format || (metadata.pages ?? 1) !== 1 ||
+        !metadata.width || !metadata.height || metadata.width * metadata.height > PHOTO_MAX_PIXELS) throw invalid();
+    // rotate() applies orientation before EXIF is dropped. No keepMetadata/withMetadata.
+    cleaned = await image.rotate().resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
+      .png().toBuffer({ resolveWithObject: true });
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw invalid();
+  }
+
+  const temporaryRoot = resolve(tmpdir());
+  const directory = await mkdtemp(join(temporaryRoot, 'delight-photo-'));
+  try {
+    const path = join(directory, 'photo.png');
+    await writeFile(path, cleaned.data, { mode: 0o600, flag: 'wx' });
+    return await process({ path, contentType: 'image/png', width: cleaned.info.width, height: cleaned.info.height });
+  } finally {
+    // Delete only our newly-created directory, including when provider processing fails.
+    if (dirname(resolve(directory)) !== temporaryRoot) throw new Error('Unexpected photo temporary directory.');
+    await rm(directory, { recursive: true, force: true });
+  }
+}

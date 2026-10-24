@@ -1,3 +1,5 @@
+import { ApiError } from './api';
+
 interface Callbacks {
   onApprove(data: { orderId: string }): Promise<void>;
   onCancel(data: { orderId?: string }): void | Promise<void>;
@@ -24,6 +26,7 @@ declare global {
         clientId: string;
         components: string[];
         pageType: string;
+        locale: string;
       }): Promise<PayPalInstance>;
     };
   }
@@ -43,7 +46,8 @@ function loadSdk() {
       script.remove();
       loading = undefined;
       reject(
-        new Error(
+        new ApiError(
+          'SDK_LOAD_FAILED',
           "PayPal could not load. Check your connection and allow PayPal in your browser.",
         ),
       );
@@ -58,18 +62,20 @@ function loadSdk() {
   });
   return loading;
 }
-export async function setupPayPal(clientId: string, callbacks: Callbacks) {
+export async function setupPayPal(clientId: string, callbacks: Callbacks, language: string = 'en') {
   await loadSdk();
   const instance = await window.paypal!.createInstance({
     clientId,
     components: ["paypal-payments"],
     pageType: "checkout",
+    locale: language === 'de' ? 'de-DE' : 'en-US',
   });
   const eligibility = await instance.findEligibleMethods({
     currencyCode: "EUR",
   });
   if (!eligibility.isEligible("paypal"))
-    throw new Error(
+    throw new ApiError(
+      'SDK_NOT_ELIGIBLE',
       "PayPal is not available in this browser. Please try another browser.",
     );
   return instance.createPayPalOneTimePaymentSession(callbacks);

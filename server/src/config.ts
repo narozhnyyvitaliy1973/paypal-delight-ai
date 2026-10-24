@@ -42,6 +42,10 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export function readSettings(env: NodeJS.ProcessEnv = process.env) {
+  const aiProvider = env.AI_PROVIDER ?? 'mock';
+  if (aiProvider !== 'mock' && aiProvider !== 'openai') {
+    throw new Error('AI_PROVIDER must be mock or openai (not implemented yet).');
+  }
   if (env.PAYPAL_ENVIRONMENT && env.PAYPAL_ENVIRONMENT !== "sandbox") {
     throw new Error("Only PAYPAL_ENVIRONMENT=sandbox is supported.");
   }
@@ -80,6 +84,7 @@ export function readSettings(env: NodeJS.ProcessEnv = process.env) {
       "Set both PayPal Sandbox credentials, or leave both empty.",
     );
   return {
+    aiProvider: aiProvider as 'mock' | 'openai',
     production,
     origin: origin.origin,
     databasePath,

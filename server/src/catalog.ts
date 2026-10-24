@@ -8,6 +8,7 @@ export const products = [
     category: "THE DAILY RITUAL",
     art: "mug",
     color: "peach",
+    translations: { de: { name: "Morgensonne-Tasse", description: "Ein bisschen Sonne für dein tägliches Ritual. Keramik, 350 ml." } },
   },
   {
     id: "weekend-tote",
@@ -18,6 +19,7 @@ export const products = [
     category: "THE EVERYDAY COMPANION",
     art: "tote",
     color: "sage",
+    translations: { de: { name: "Wochenendtasche", description: "Platz für alles Wichtige. Und ein paar spontane Pläne." } },
   },
   {
     id: "cloud-headphones",
@@ -28,6 +30,7 @@ export const products = [
     category: "THE MOMENT OF ESCAPE",
     art: "headphones",
     color: "lavender",
+    translations: { de: { name: "Wolke-sieben-Kopfhörer", description: "Dein Soundtrack. Weiche Polster und kabellose Freiheit." } },
   },
 ] as const;
 

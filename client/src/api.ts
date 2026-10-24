@@ -7,6 +7,7 @@ export interface Product {
   category: string;
   art: string;
   color: string;
+  translations: { de: { name: string; description: string } };
 }
 export interface Store {
   products: Product[];
@@ -72,7 +73,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
     );
   return data as T;
 }
-export const formatMoney = (minor: number, currency = "EUR") =>
-  new Intl.NumberFormat("en-IE", { style: "currency", currency }).format(
+export const formatMoney = (minor: number, currency = "EUR", locale = "en") =>
+  new Intl.NumberFormat(locale === 'de' ? 'de-DE' : 'en-IE', { style: "currency", currency }).format(
     minor / 100,
   );

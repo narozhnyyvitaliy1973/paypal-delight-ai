@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useI18n } from 'vue-i18n';
+import { errorKey, setLocale, type Locale } from './i18n';
+import LegalPage from './components/LegalPage.vue';
 import {
   api,
   ApiError,
-  formatMoney,
+  formatMoney as formatValue,
   type Store,
   type Product,
   type Order,
@@ -11,6 +14,16 @@ import {
 import { setupPayPal, type PaymentSession } from "./paypal";
 import ProductArt from "./components/ProductArt.vue";
 
+const { t, locale } = useI18n();
+const legalPage = location.pathname === '/legal' ? 'legal' : location.pathname === '/privacy' ? 'privacy' : null;
+const formatMoney = (minor: number, currency = 'EUR') => formatValue(minor, currency, locale.value);
+function productName(product: { id: string; name: string }) {
+  const catalog = store.value?.products.find(item => item.id === product.id);
+  return locale.value === 'de' ? catalog?.translations.de.name ?? product.name : product.name;
+}
+function productDescription(product: Product) {
+  return locale.value === 'de' ? product.translations.de.description : product.description;
+}
 const store = ref<Store>();
 const selected = ref<Product>();
 const order = ref<Order>();
@@ -36,23 +49,20 @@ const paymentUncertain = computed(
     !terminal.value &&
     order.value.status !== "COMPLETED",
 );
-const errorText = (error: unknown) =>
-  error instanceof Error
-    ? error.message
-    : "Checkout could not be completed. Please check your order.";
+const errorText = errorKey;
 const statusText = computed(() => {
   switch (order.value?.status) {
     case "CANCELLED":
-      return "Checkout cancelled. Your gift has not been unlocked.";
+      return t('status.CANCELLED');
     case "DECLINED":
-      return "Payment was declined. You can start again with a different Sandbox payment method.";
+      return t('status.DECLINED');
     case "PENDING":
-      return "PayPal is still processing this payment. Your gift will unlock after confirmation.";
+      return t('status.PENDING');
     case "REVIEW":
-      return "The payment details need review. Keep this order reference and contact the project owner.";
+      return t('status.REVIEW');
     default:
       return paymentUncertain.value
-        ? "Payment confirmation was interrupted. Check or retry this same order."
+        ? t('status.uncertain')
         : "";
   }
 });
@@ -82,7 +92,7 @@ async function acceptOrder(value: Order) {
   if (value.status === "COMPLETED") {
     const confirmed = await api<Order>(`/orders/${value.id}/gift`);
     if (confirmed.status !== "COMPLETED" || !confirmed.gift)
-      throw new Error("A confirmed purchase is required.");
+      throw new ApiError('PAYMENT_REQUIRED', '');
     celebration.value = confirmed;
     message.value = "";
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -111,7 +121,7 @@ async function onApprove(data: { orderId: string }) {
   try {
     if (pendingOrder) await pendingOrder;
     if (!order.value || data.orderId !== order.value.paypalOrderId)
-      throw new Error("The approved payment does not match this order.");
+      throw new ApiError('APPROVED_ORDER_MISMATCH', '');
     await acceptOrder(
       await api<Order>(`/orders/${order.value.id}/capture`, {}),
     );
@@ -138,7 +148,7 @@ async function onCancel() {
       );
     if (!celebration.value)
       message.value =
-        "Checkout was closed. You can return to your selection whenever you like.";
+        'checkout.closed';
   } catch (error) {
     message.value = errorText(error);
   } finally {
@@ -169,7 +179,7 @@ function selectProduct(product: Product) {
     ?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 async function ensureOrder(): Promise<Order> {
-  if (!selected.value) throw new Error("Choose a product first.");
+  if (!selected.value) throw new ApiError('INVALID_PRODUCT', '');
   if (order.value && !terminal.value) return order.value;
   if (terminal.value) {
     order.value = undefined;
@@ -203,7 +213,7 @@ async function startCheckout() {
       { presentationMode: "auto" },
       pendingOrder.then((value) => {
         if (!value.paypalOrderId || value.status === "COMPLETED")
-          throw new Error("This order is already processed.");
+          throw new ApiError('ORDER_PROCESSED', '');
         return { orderId: value.paypalOrderId };
       }),
     );
@@ -219,7 +229,7 @@ async function renderPayPalButton() {
   paypalMount.value.replaceChildren();
   if (!session) return;
   const button = document.createElement("paypal-button");
-  button.setAttribute("aria-label", "Pay with PayPal Sandbox");
+  button.setAttribute("aria-label", t('checkout.button'));
   if (busy.value) button.setAttribute("disabled", "");
   button.addEventListener("click", () => void startCheckout());
   paypalMount.value.append(button);
@@ -228,6 +238,7 @@ watch(busy, (value) =>
   paypalMount.value?.firstElementChild?.toggleAttribute("disabled", value),
 );
 watch([paymentUncertain, celebration], () => void renderPayPalButton());
+watch(locale, () => paypalMount.value?.firstElementChild?.setAttribute('aria-label', t('checkout.button')));
 async function initializePayPal() {
   if (!store.value?.checkout.clientId || sdkLoading.value) return;
   sdkLoading.value = true;
@@ -239,10 +250,10 @@ async function initializePayPal() {
       onError: () => {
         if (!celebration.value)
           message.value =
-            "PayPal checkout was interrupted. Check your order before trying again.";
+            'checkout.interrupted';
         busy.value = false;
       },
-    });
+    }, locale.value);
     if (session.hasReturned()) await session.resume();
     await renderPayPalButton();
   } catch (error) {
@@ -310,13 +321,13 @@ async function loadStore() {
     loading.value = false;
   }
 }
-onMounted(() => void loadStore());
+onMounted(() => { if (!legalPage) void loadStore(); });
 </script>
 
 <template>
   <div class="announcement">
-    A little purchase. A personal surprise.
-    <span>Welcome to the Sandbox store.</span>
+    {{ t('announcement.title') }}
+    <span>{{ t('announcement.welcome') }}</span>
   </div>
   <div class="page-shell">
     <header class="site-header">
@@ -324,12 +335,18 @@ onMounted(() => void loadStore());
         ><span class="brand-mark">d.</span
         ><span>PayPal Delight <b>AI</b></span></a
       >
-      <span class="sandbox-tag"
-        ><span class="tiny-dot"></span> Sandbox only</span
-      >
+      <div class="header-actions">
+        <span class="sandbox-tag"><span class="tiny-dot"></span>{{ t('common.sandbox') }}</span>
+        <label class="language-switch">{{ t('common.language') }}
+          <select :value="locale" @change="setLocale(($event.target as HTMLSelectElement).value as Locale)" data-testid="language-switch">
+            <option value="de">DE</option><option value="en">EN</option>
+          </select>
+        </label>
+      </div>
     </header>
-    <main>
-      <p v-if="message" class="notice" role="alert">{{ message }}</p>
+    <LegalPage v-if="legalPage" :kind="legalPage" />
+    <main v-else>
+      <p v-if="message" class="notice" role="alert">{{ t(message) }}</p>
       <section
         v-if="celebration"
         class="celebration"
@@ -337,103 +354,94 @@ onMounted(() => void loadStore());
       >
         <div class="success-icon" aria-hidden="true">✓</div>
         <p class="eyebrow">
-          PAYMENT CONFIRMED · {{ formatMoney(celebration.amountMinor) }}
+          {{ t('celebrate.confirmed') }} · {{ formatMoney(celebration.amountMinor) }}
         </p>
-        <h1 id="celebration-title">Celebrate Your<br /><em>Purchase!</em></h1>
+        <h1 id="celebration-title">{{ t('celebrate.title') }}<br /><em>{{ t('celebrate.accent') }}</em></h1>
         <p class="celebration-copy">
-          Your <strong>{{ celebration.product.name }}</strong> is the beginning
-          of something delightful.
+          {{ t('celebrate.product', { product: productName(celebration.product) }) }}
         </p>
         <div class="gift-banner">
           <span aria-hidden="true">✦</span>
           <div>
-            <strong
-              >Your personal AI gift is
-              {{
-                celebration.gift?.status === "AVAILABLE"
-                  ? "available"
-                  : "reserved"
-              }}.</strong
-            >
-            <p>One confirmed purchase. One gift made just for you.</p>
+            <strong>{{ t(celebration.gift?.status === 'AVAILABLE' ? 'celebrate.available' : celebration.gift?.status === 'GENERATED' ? 'celebrate.generated' : 'celebrate.reserved') }}</strong>
+            <p>{{ t('celebrate.one') }}</p>
           </div>
         </div>
         <div class="gift-options">
           <button disabled>
-            <span>01</span><strong>Caricature</strong
-            ><small>You and your new favourite. Photo optional.</small>
+            <span>01</span><strong>{{ t('gift.caricature') }}</strong
+            ><small>{{ t('gift.caricatureDescription') }}</small>
           </button>
           <button disabled>
-            <span>02</span><strong>Greeting Card</strong
-            ><small>A little message with a lot of personality.</small>
+            <span>02</span><strong>{{ t('gift.greeting') }}</strong
+            ><small>{{ t('gift.greetingDescription') }}</small>
           </button>
           <button disabled>
-            <span>03</span><strong>Mini Comic</strong
-            ><small>Your purchase, with a story of its own.</small>
+            <span>03</span><strong>{{ t('gift.comic') }}</strong
+            ><small>{{ t('gift.comicDescription') }}</small>
           </button>
         </div>
         <p class="muted">
-          Gift creation is coming in the next stage. Your purchase and gift
-          entitlement are saved.
+          {{ t('celebrate.next') }}
         </p>
         <details class="receipt">
-          <summary>View purchase details</summary>
+          <summary>{{ t('celebrate.receipt') }}</summary>
           <dl>
-            <dt>Order</dt>
+            <dt>{{ t('celebrate.order') }}</dt>
             <dd>{{ celebration.id }}</dd>
-            <dt>PayPal Order</dt>
+            <dt>{{ t('celebrate.paypalOrder') }}</dt>
             <dd>{{ celebration.paypalOrderId }}</dd>
-            <dt>Capture</dt>
+            <dt>{{ t('celebrate.capture') }}</dt>
             <dd>{{ celebration.captureId }}</dd>
-            <dt>Total</dt>
+            <dt>{{ t('common.total') }}</dt>
             <dd>{{ formatMoney(celebration.amountMinor) }} EUR</dd>
           </dl>
         </details>
         <button class="text-button" @click="resetPurchase()">
-          Back to the store <span aria-hidden="true">↗</span>
+          {{ t('common.back') }} <span aria-hidden="true">↗</span>
         </button>
       </section>
       <template v-else>
         <section class="hero">
           <div>
-            <p class="eyebrow">THE LITTLE THINGS, MADE PERSONAL</p>
-            <h1>Good finds.<br /><em>Even better feelings.</em></h1>
+            <p class="eyebrow">{{ t('hero.eyebrow') }}</p>
+            <h1>{{ t('hero.title') }}<br /><em>{{ t('hero.accent') }}</em></h1>
             <p class="hero-description">
-              A few everyday favourites. An unexpected personal gift.<br
+              {{ t('hero.description') }}<br
                 class="desktop-break"
               />
-              Pick something you love — we’ll add a little delight.
+              {{ t('hero.invitation') }}
             </p>
             <a class="hero-link" href="#collection"
-              >Explore the collection <span aria-hidden="true">↓</span></a
+              >{{ t('hero.explore') }} <span aria-hidden="true">↓</span></a
             >
           </div>
           <div
             class="hero-stamp"
-            aria-label="One personal AI gift with every confirmed purchase"
+            :aria-label="t('hero.stampLabel')"
           >
             <span class="stamp-star" aria-hidden="true">✳</span
-            ><strong>A little extra,<br />just for you.</strong
-            ><small>1 purchase = 1 AI gift</small>
+            ><strong>{{ t('hero.stamp') }}<br />{{ t('hero.stampAccent') }}</strong
+            ><small>{{ t('hero.equation') }}</small>
           </div>
         </section>
         <section id="collection" aria-labelledby="collection-title">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">THE DELIGHT EDIT</p>
-              <h2 id="collection-title">Three good reasons to smile.</h2>
+              <p class="eyebrow">{{ t('store.eyebrow') }}</p>
+              <h2 id="collection-title">{{ t('store.title') }}</h2>
             </div>
-            <span class="collection-count">01 — 03 / THE ESSENTIALS</span>
+            <span class="collection-count">{{ t('store.count') }}</span>
           </div>
           <p v-if="loading && !store" role="status" class="loading">
-            Opening the store…
+            {{ t('store.loading') }}
           </p>
           <button
             v-if="!loading && !store"
             class="primary-button"
             @click="loadStore"
           >
-            Try loading again
+            {{ t('store.retry') }}
           </button>
           <div v-if="store" class="product-grid">
             <article
@@ -444,16 +452,16 @@ onMounted(() => void loadStore());
             >
               <div class="art-panel" :class="product.color">
                 <span class="product-index">0{{ index + 1 }}</span
-                ><span class="gift-pill">+ a personal AI gift</span
+                ><span class="gift-pill">{{ t('store.gift') }}</span
                 ><ProductArt :kind="product.art" />
               </div>
               <div class="product-heading">
-                <h3>{{ product.name }}</h3>
+                <h3>{{ productName(product) }}</h3>
                 <span class="price">{{
                   formatMoney(product.amountMinor, product.currency)
                 }}</span>
               </div>
-              <p class="product-description">{{ product.description }}</p>
+              <p class="product-description">{{ productDescription(product) }}</p>
               <button
                 class="choose-button"
                 :class="{ chosen: selected?.id === product.id }"
@@ -466,8 +474,8 @@ onMounted(() => void loadStore());
               >
                 {{
                   selected?.id === product.id
-                    ? "Selected for you"
-                    : "Choose this one"
+                    ? t('store.selected')
+                    : t('store.choose')
                 }}
                 <span aria-hidden="true">{{
                   selected?.id === product.id ? "✓" : "↗"
@@ -484,53 +492,50 @@ onMounted(() => void loadStore());
           :aria-busy="busy"
         >
           <div class="checkout-summary">
-            <p class="eyebrow">YOUR LITTLE MOMENT OF DELIGHT</p>
-            <h2 id="checkout-title">Make it yours.</h2>
+            <p class="eyebrow">{{ t('checkout.eyebrow') }}</p>
+            <h2 id="checkout-title">{{ t('checkout.title') }}</h2>
             <div class="checkout-item">
               <div class="mini-art" :class="selected.color">
                 <ProductArt :kind="selected.art" />
               </div>
               <div>
-                <strong>{{ selected.name }}</strong>
-                <p>Quantity 1 · Includes one personal AI gift</p>
+                <strong>{{ productName(selected) }}</strong>
+                <p>{{ t('checkout.quantity') }}</p>
               </div>
               <strong class="checkout-price">{{
                 formatMoney(selected.amountMinor)
               }}</strong>
             </div>
             <div class="checkout-total">
-              <span>Total <small>(EUR)</small></span
+              <span>{{ t('common.total') }} <small>(EUR)</small></span
               ><strong>{{ formatMoney(selected.amountMinor) }}</strong>
             </div>
             <p class="demo-note">
-              Demo products, test funds. Nothing is shipped and no real money is
-              charged.
+              {{ t('checkout.demo') }}
             </p>
           </div>
           <div class="payment-panel">
-            <p class="eyebrow">A SAFE LITTLE CHECKOUT</p>
-            <h3>Pay with PayPal</h3>
+            <p class="eyebrow">{{ t('checkout.safe') }}</p>
+            <h3>{{ t('checkout.pay') }}</h3>
             <p>
-              Use your Sandbox Personal account. Your gift unlocks after payment
-              is confirmed.
+              {{ t('checkout.account') }}
             </p>
             <p v-if="statusText" class="payment-status" role="status">
               {{ statusText }}
             </p>
             <p v-if="!store.checkout.enabled" class="payment-status">
-              Sandbox checkout is being set up. Come back soon to try a
-              purchase.
+              {{ t('checkout.unavailable') }}
             </p>
             <template v-else>
-              <p v-if="sdkLoading" role="status">Preparing secure checkout…</p>
+              <p v-if="sdkLoading" role="status">{{ t('checkout.preparing') }}</p>
               <div v-if="sdkError" class="sdk-error" role="alert">
-                <p>{{ sdkError }}</p>
+                <p>{{ t(sdkError) }}</p>
                 <button
                   class="text-button"
                   :disabled="sdkLoading"
                   @click="initializePayPal"
                 >
-                  Reload PayPal
+                  {{ t('checkout.reload') }}
                 </button>
               </div>
               <div
@@ -539,7 +544,7 @@ onMounted(() => void loadStore());
                 class="paypal-mount"
               ></div>
               <p v-if="busy" role="status" class="processing">
-                Checking with PayPal… Please keep this page open.
+                {{ t('checkout.processing') }}
               </p>
               <div v-if="order && !terminal" class="recovery-actions">
                 <button
@@ -547,56 +552,56 @@ onMounted(() => void loadStore());
                   :disabled="busy"
                   @click="confirmPayment(false)"
                 >
-                  Check payment status</button
+                  {{ t('checkout.check') }}</button
                 ><button
                   v-if="paymentUncertain && order.status !== 'PENDING'"
                   class="text-button"
                   :disabled="busy"
                   @click="confirmPayment(true)"
                 >
-                  Retry confirmation</button
+                  {{ t('checkout.retry') }}</button
                 ><button
                   v-if="!order.captureAttempted"
                   class="text-button"
                   :disabled="busy"
                   @click="onCancel"
                 >
-                  Cancel this checkout
+                  {{ t('checkout.cancel') }}
                 </button>
               </div>
             </template>
             <p class="secure-note">
-              <span aria-hidden="true">◇</span> Secure PayPal checkout · Sandbox
-              environment
+              <span aria-hidden="true">◇</span> {{ t('checkout.secure') }}
             </p>
             <p v-if="order" class="order-reference">
-              Order reference: {{ order.id }}
+              {{ t('checkout.reference', { id: order.id }) }}
             </p>
           </div>
         </section>
-        <section class="how-it-works" aria-label="How your gift works">
+        <section class="how-it-works" :aria-label="t('steps.label')">
           <div>
             <span>01</span>
-            <h3>Find your favourite</h3>
-            <p>Choose a little something from our edit.</p>
+            <h3>{{ t('steps.first') }}</h3>
+            <p>{{ t('steps.firstText') }}</p>
           </div>
           <div>
             <span>02</span>
-            <h3>Make it official</h3>
-            <p>Complete a test purchase with PayPal.</p>
+            <h3>{{ t('steps.second') }}</h3>
+            <p>{{ t('steps.secondText') }}</p>
           </div>
           <div>
             <span>03</span>
-            <h3>Add your personality</h3>
-            <p>Your personal AI gift is next. Coming soon.</p>
+            <h3>{{ t('steps.third') }}</h3>
+            <p>{{ t('steps.thirdText') }}</p>
           </div>
         </section>
       </template>
     </main>
     <footer>
-      <span class="footer-brand">A little more delight.</span
+      <span class="footer-brand">{{ t('footer.brand') }}</span
       ><span>PayPal Delight AI · Hackathon 2026</span
-      ><span>Made for a smile <span aria-hidden="true">✳</span></span>
+      ><nav class="legal-links"><a href="/legal">{{ t('footer.legal') }}</a><a href="/privacy">{{ t('footer.privacy') }}</a></nav>
+      <span>{{ t('footer.smile') }} <span aria-hidden="true">✳</span></span>
     </footer>
   </div>
 </template>

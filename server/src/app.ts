@@ -9,6 +9,7 @@ import { PayPalClient, type PayPalGateway } from "./paypal.js";
 import { Checkout } from "./checkout.js";
 import { AppError, PayPalError } from "./errors.js";
 import { products } from "./catalog.js";
+import { createGiftProvider } from './gifts/provider.js';
 
 interface Dependencies {
   settings?: Settings;
@@ -33,6 +34,7 @@ export function buildApp(
   dependencies: Dependencies = {},
 ) {
   const settings = dependencies.settings ?? readSettings();
+  const giftProvider = createGiftProvider(settings.aiProvider);
   const store = dependencies.store ?? new OrderStore(settings.databasePath);
   const paypal =
     dependencies.paypal ??
@@ -124,6 +126,11 @@ export function buildApp(
       status: "ok",
       service: "paypal-delight-ai",
     }));
+    // Public fixed sample only: no upload, generation job, payment or gift redemption.
+    app.get('/api/gifts/demo/caricature.png', async (_request, reply) => {
+      const result = await giftProvider.generate({ type: 'caricature', product: products[0], language: 'en', wishes: '' });
+      return reply.type(result.image.contentType).header('X-Delight-Demo', 'true').send(result.image.bytes);
+    });
     app.get("/api/store", async (request, reply) => {
       reply.setCookie(
         "delight_session",
