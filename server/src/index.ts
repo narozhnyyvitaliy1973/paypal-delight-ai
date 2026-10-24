@@ -1,13 +1,22 @@
-import { buildApp } from './app.js';
-import { loadRootEnv, readConfig } from './config.js';
+import { buildApp } from "./app.js";
+import { loadRootEnv, readConfig } from "./config.js";
 
-const app = buildApp({ logger: true });
+loadRootEnv();
+const app = buildApp({
+  logger: {
+    redact: [
+      "req.headers.cookie",
+      "req.headers.authorization",
+      'res.headers["set-cookie"]',
+    ],
+  },
+});
 let shuttingDown = false;
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  app.log.info({ signal }, 'Shutting down server');
+  app.log.info({ signal }, "Shutting down server");
 
   try {
     await app.close();
@@ -17,11 +26,10 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   }
 }
 
-process.once('SIGINT', () => void shutdown('SIGINT'));
-process.once('SIGTERM', () => void shutdown('SIGTERM'));
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 try {
-  loadRootEnv();
   await app.listen(readConfig());
 } catch (error) {
   app.log.error(error);

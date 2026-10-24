@@ -1,163 +1,181 @@
 # PayPal Delight AI
 
-Конкурсный проект для PayPal AI Hackathon 2026: после подтверждённой сервером
-PayPal Sandbox-оплаты покупатель сможет создать один персональный AI-подарок.
-Планируемые режимы: **Caricature**, **Greeting Card**, **Mini Comic**.
+Demo Store для PayPal AI Hackathon 2026: покупка через PayPal Sandbox открывает право
+на один персональный AI-подарок. Реализован **этап 2 — Sandbox Checkout**.
+Caricature, Greeting Card и Mini Comic пока представлены неактивными кнопками;
+AI-генерация будет отдельным этапом.
 
-Сейчас реализован **этап 1 — локальный каркас**: Vue-страница с проверкой соединения
-и Fastify API. Оплата, AI-генерация и постоянное хранилище пока не реализованы.
-Выбор БД требует отдельного согласования.
+## Локальный запуск
 
-## Требования
-
-- Node.js **22.12+ в ветке 22.x**; npm **9+**.
-- Windows PowerShell: используйте `npm.cmd`. В Linux/macOS те же команды работают с `npm`.
-- Ключи PayPal/OpenAI для первого этапа не нужны.
-
-## Установка
-
-Из каталога репозитория:
+Требования: Node.js **22.12+ в ветке 22.x**, npm **9+**. На Windows используйте
+`npm.cmd`; на Linux/macOS — `npm`.
 
 ```powershell
 npm.cmd ci
+# Только если .env ещё не существует:
 Copy-Item .env.example .env
 ```
 
-Копирование `.env` необязательно: значения по умолчанию уже подходят для локального
-запуска. Не перезаписывайте существующий `.env` при повторной установке.
-После изменения зависимостей используйте `npm.cmd install` и сохраняйте обновлённый
-корневой `package-lock.json` вместе с манифестами обоих workspaces.
+Заполните в корневом `.env` `PAYPAL_CLIENT_ID` и `PAYPAL_CLIENT_SECRET` из
+**Sandbox Business REST app** в PayPal Developer Dashboard. Без обоих значений
+магазин доступен для просмотра, оплата отключена. Один заполненный ключ считается
+ошибкой конфигурации. Не передавайте ключи в чат и не помещайте их в `VITE_*`.
 
-## Локальная разработка
-
-Откройте два терминала в корне репозитория.
-
-Терминал 1 — backend с перезапуском при изменении исходников:
+Откройте два терминала **в корне проекта**:
 
 ```powershell
+# Терминал 1: backend с перезапуском при изменениях
 npm.cmd run dev:server
 ```
 
-Терминал 2 — frontend:
-
 ```powershell
+# Терминал 2: frontend
 npm.cmd run dev:client
 ```
 
-Откройте **http://127.0.0.1:5173**. На странице появится `Service is connected`.
-Оба процесса останавливаются через `Ctrl+C`.
+Откройте **http://127.0.0.1:5173** — адрес должен совпадать с `APP_ORIGIN`.
+Не заменяйте `127.0.0.1` на `localhost` без соответствующего изменения `.env`:
+это другой origin и другая cookie-сессия. После изменения `.env` перезапустите
+оба процесса. Для остановки используйте `Ctrl+C`.
 
-Прямая проверка API:
+[Пошаговая инструкция настоящей Sandbox-покупки](docs/SANDBOX_TESTING.md).
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8003/api/health
-```
+## Конфигурация
 
-Ожидается HTTP 200 и JSON:
+| Переменная | По умолчанию / назначение |
+| --- | --- |
+| `HOST` | `127.0.0.1`, адрес Fastify |
+| `PORT` | `8003`, порт Fastify |
+| `APP_ORIGIN` | `http://127.0.0.1:5173`, точный origin frontend без завершающего `/` |
+| `DATABASE_PATH` | `data/delight.sqlite`, относительный путь считается от корня проекта |
+| `PAYPAL_ENVIRONMENT` | Только `sandbox`; другое значение останавливает запуск |
+| `PAYPAL_CLIENT_ID` | Client ID приложения Sandbox Business; публичная часть конфигурации SDK |
+| `PAYPAL_CLIENT_SECRET` | Secret того же приложения; используется только сервером |
+| `NODE_ENV` | Для будущего размещения: `production` |
 
-```json
-{"status":"ok","service":"paypal-delight-ai"}
-```
+`.env` загружается встроенным механизмом Node.js; переменные окружения имеют
+приоритет. Файл необязателен, если конфигурация уже передана через окружение.
+В production обязательны HTTPS `APP_ORIGIN` и абсолютный `DATABASE_PATH`
+**вне каталога релиза**, например `/var/www/paypal-delight-ai/shared/delight.sqlite`.
+Production cookie имеет флаг Secure. API URL и SDK URL PayPal фиксированы на Sandbox;
+Live переключателя нет даже при `NODE_ENV=production`.
 
-Frontend вызывает относительный `/api/health`. Vite перенаправляет `/api` в backend
-без удаления префикса. Дополнительная настройка CORS не требуется.
-Порты frontend фиксированы: при занятом порте Vite сообщает ошибку, а не выбирает другой.
+## Как работает покупка
 
-## Сборка и проверки
+1. `GET /api/store` возвращает три товара с серверными ценами EUR, публичную
+   конфигурацию SDK и устанавливает случайную HttpOnly cookie-сессию покупателя.
+2. Официальный JS SDK v6 загружается с `www.sandbox.paypal.com/web-sdk/v6/core`.
+   Используются `createInstance`, проверка eligibility в EUR и
+   `createPayPalOneTimePaymentSession`. Поддержаны onApprove/onCancel/onError и
+   возобновление redirect-сессии через hasReturned/resume.
+3. `POST /api/orders` принимает только `productId` и UUID `requestId` попытки.
+   Сервер сохраняет снимок товара и суммы в SQLite, затем создаёт Orders API v2
+   Order. Цена, валюта, статус, merchant и PayPal ID не принимаются от браузера.
+4. После одобрения покупателем `POST /api/orders/:id/capture` сначала читает
+   сервером PayPal Order, проверяет его и выполняет Capture только для APPROVED.
+   Затем заново читает полный заказ: сокращённый ответ Capture не используется
+   как единственное доказательство оплаты.
+5. Успех требует совпадения Order ID, intent, reference/custom/invoice ID,
+   товара, количества, суммы и EUR, merchant ID, записанного при создании заказа,
+   а также единственного полного Capture со статусом COMPLETED. Общий статус
+   Order тоже должен быть COMPLETED. PENDING не выдаёт подарок.
+6. COMPLETED и уникальное право на подарок сохраняются одной SQLite-транзакцией.
+   `GET /api/orders/:id/gift` доступен только с cookie владельца оплаченного заказа.
+   Только после этого frontend показывает **Celebrate Your Purchase!**.
+
+Все `:id` в нашем API — локальные UUID, а не PayPal Order ID. Заказы других сессий
+возвращают 404. POST требует точного Origin и JSON; платёжные маршруты ограничены
+30 запросами в минуту на IP. CORS не включён. За будущим Nginx без отдельной настройки
+trustProxy этот лимит будет общим для запросов прокси; настройка доверия — часть
+будущего deployment, а не повод доверять произвольному X-Forwarded-For.
+
+Дополнительные маршруты:
+
+| Endpoint | Назначение |
+| --- | --- |
+| `GET /api/health` | HTTP 200, `{"status":"ok","service":"paypal-delight-ai"}` |
+| `GET /api/orders/:id` | Сохранённое состояние заказа владельца |
+| `POST /api/orders/:id/reconcile` | Прочитать состояние PayPal и подтвердить уже выполненную оплату, без нового Capture |
+| `POST /api/orders/:id/cancel` | Закрыть неоплаченную попытку; при начавшемся Capture сначала сверить состояние PayPal |
+
+## Хранение и повторы
+
+SQLite через `better-sqlite3`: WAL, `synchronous=FULL`, foreign keys, busy timeout,
+версия схемы через `PRAGMA user_version`. При первом запуске создаются `orders`
+и `gift_entitlements`. Суммы хранятся целым числом центов; в PayPal передаются
+десятичные строки. Сырые ответы PayPal, сведения плательщика и access tokens в БД
+не сохраняются.
+
+`orders` содержит снимок товара, сумму, EUR, статус, PayPal Order ID, merchant ID,
+Capture ID (включая PENDING/DECLINED, когда ID получен), устойчивые UUID для
+Create/Capture и хеш cookie владельца. Уникальные ограничения защищают Order ID,
+Capture ID и `(owner_hash, client_key)`.
+
+Повторы Create/Capture используют сохранённые `PayPal-Request-Id`. SQLite lease
+на 120 секунд блокирует одновременную обработку одного заказа, в том числе двумя
+процессами. После аварийного завершения процесса незавершённая операция может
+оставаться занятой до истечения lease. После потерянного ответа Capture проверяется
+состояние того же Order, а не создаётся новая покупка. Неопределённый Create можно
+повторять в течение 5 минут; затем старый ключ не переотправляется вслепую.
+
+Право на подарок имеет уникальный `order_id` и состояния AVAILABLE/RESERVED/GENERATED.
+Повторное подтверждение не создаёт новое право и не сбрасывает использованное.
+Поля `mode` и `result_path` подготовлены для следующего этапа; endpoint генерации
+или списания права сейчас отсутствует.
+
+После перезапуска сервера покупки сохраняются. Для повторного открытия используйте
+ссылку `/?order=<локальный UUID>` **в том же браузере**. Очистка cookies, другой
+профиль или истечение 30-дневной cookie лишают доступа к анонимной покупке;
+аккаунты и восстановление доступа пока не реализованы. Сам UUID доступа не даёт.
+В случае неизвестного результата нажмите **Check payment status** или
+**Retry confirmation** для существующего заказа.
+
+БД, WAL/SHM, `.env`, cache и приватный инфраструктурный отчёт исключены из Git.
+БД нельзя включать в релизные архивы или заменять при обновлении кода. Резервное
+копирование живой WAL-БД требует SQLite backup API либо остановки нового сервиса
+и согласованного копирования файлов; не копируйте один `.sqlite` во время записи.
+
+## Проверки и сборка
 
 ```powershell
 npm.cmd run typecheck
 npm.cmd run build
 npm.cmd test
 npm.cmd run test:smoke
+npm.cmd run test:browser
 ```
 
-- `typecheck` проверяет TypeScript, Vue-компоненты и конфигурацию Vite.
-- `build` создаёт `client/dist/` и `server/dist/index.js`.
-- `test` собирает backend и запускает встроенный `node:test`: health, неизвестный
-  маршрут и валидация конфигурации. Fastify `inject` не требует свободного TCP-порта.
-- `test:smoke` требует предварительной сборки. Он запускает настоящий собранный
-  backend, Vite dev и Vite preview на временных loopback-портах; проверяет HTTP,
-  статику и `/api/health` через proxy. После проверки процессы закрываются.
+- Серверные тесты: настоящий Fastify, SQLite и PayPal HTTP-клиент с подменённым
+  сетевым transport. Проверяют суммы, сессии, идемпотентность, конкуренцию, restart,
+  отмену, отказ, PENDING, повреждённые ответы и восстановление после сетевого сбоя.
+- HTTP smoke: запускает собранный backend с отдельной временной БД, Vite dev/preview,
+  проверяет health и статику. `test:smoke` требует предварительной сборки.
+- Browser: `playwright-core` использует установленный Chrome/Edge/Chromium.
+  При необходимости задайте `BROWSER_EXECUTABLE_PATH`. Скачивания браузера нет.
+  `test:browser` требует сборки, проверяет интерфейс с симуляцией SDK v6 и PayPal API,
+  но с настоящим backend и SQLite. Скриншоты: `.npm-cache/store-desktop.png`,
+  `store-mobile.png`, `purchase-success.png`. Это не настоящая Sandbox-оплата.
 
-Проверка собранного приложения вручную, также в двух терминалах:
+Локальная проверка собранного frontend: поменяйте `APP_ORIGIN` на
+`http://127.0.0.1:4173`, затем в двух терминалах запустите `npm.cmd start` и
+`npm.cmd run preview`. Верните origin на 5173 для dev-режима.
 
-```powershell
-# Терминал 1
-npm.cmd start
-```
+## Будущее развёртывание
 
-```powershell
-# Терминал 2
-npm.cmd run preview
-```
+Сохраняется контракт `client/dist/` и `server/dist/index.js`. Для релиза нужны
+корневые `package.json`/`package-lock.json`, оба workspace `package.json` и обе
+директории `dist`. Запуск: `node server/dist/index.js`. Nginx должен сохранять
+префикс `/api`; runtime-конфигурация может приходить через systemd EnvironmentFile.
 
-Frontend: **http://127.0.0.1:4173**. Preview предназначен для локальной проверки сборки.
+`better-sqlite3` содержит нативный модуль: production dependencies устанавливаются
+командой `npm ci --omit=dev` **на целевой Linux-системе**. Windows node_modules не
+переносятся. Системный Node.js не меняется без отдельного решения. Deployment,
+настройки VPS и commit/push выполняются только по отдельному разрешению.
 
-## Конфигурация
+## Документация
 
-| Переменная | По умолчанию | Назначение |
-| --- | --- | --- |
-| `HOST` | `127.0.0.1` | Адрес, на котором слушает Fastify |
-| `PORT` | `8003` | TCP-порт Fastify, целое число от 1 до 65535 |
-
-Backend читает `.env` из корня репозитория встроенным механизмом Node.js;
-существующие переменные окружения имеют приоритет. Без `.env` сервер также запускается.
-Vite использует `HOST`/`PORT` для настройки своего локального proxy. После изменения
-этих значений перезапустите оба процесса. Для одинаковой локальной конфигурации
-используйте корневой `.env`, а не отдельные Vite `.env.development`/`.env.local`.
-
-`.env`, сборки, `node_modules`, npm cache и приватный инфраструктурный отчёт исключены
-из Git. Не помещайте серверные секреты в переменные `VITE_*`: они доступны браузеру.
-
-## Структура
-
-```text
-client/
-  index.html
-  package.json
-  tsconfig.json
-  vite.config.ts
-  src/
-    App.vue
-    main.ts
-    style.css
-server/
-  package.json
-  tsconfig.json
-  src/
-    app.ts
-    config.ts
-    index.ts
-  test/
-    app.test.mjs
-    config.test.mjs
-tests/
-  smoke.test.mjs
-.env.example
-.gitignore
-.nvmrc
-package.json
-package-lock.json
-tsconfig.base.json
-README.md
-LICENSE
-```
-
-## Контракт будущего развёртывания
-
-Каркас совместим со схемой отдельных release directories и переключением `current`:
-
-- frontend — статические файлы `client/dist/`, которые сможет отдавать Nginx;
-- backend — `node server/dist/index.js` из корня релиза;
-- релизу нужны корневые `package.json`, `package-lock.json`, оба workspace
-  `package.json` и обе директории `dist`;
-- runtime-зависимости устанавливаются командой `npm ci --omit=dev` на целевой ОС;
-  Windows `node_modules` не переносятся;
-- systemd сможет передавать `HOST`, `PORT` и будущие серверные настройки через
-  окружение; runtime не требует TypeScript, tsx или Vite;
-- Nginx должен сохранять префикс `/api` при проксировании к backend.
-
-Deployment и настройка VPS в первый этап не входят. Конфигурации Nginx/systemd,
-домен, хранилище и дальнейшие архитектурные решения согласовываются отдельно.
-Приватный документ передачи инфраструктуры хранится вне репозитория.
+- [PayPal JS SDK v6](https://developer.paypal.com/sdk/js/set-up/)
+- [SDK v6 reference](https://developer.paypal.com/sdk/js/reference/)
+- [Orders API v2](https://developer.paypal.com/api/rest/integration/orders-api)
+- [PayPal idempotency](https://developer.paypal.com/api/rest/reference/idempotency/)
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)

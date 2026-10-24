@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildApp } from '../dist/app.js';
+import { OrderStore } from '../dist/database.js';
 
 test('GET /api/health returns the service status', async (t) => {
-  const app = buildApp();
+  const app = buildApp({}, { store: new OrderStore(':memory:') });
   t.after(() => app.close());
 
   const response = await app.inject({ method: 'GET', url: '/api/health' });
@@ -17,7 +18,7 @@ test('GET /api/health returns the service status', async (t) => {
 });
 
 test('unknown API routes return 404', async (t) => {
-  const app = buildApp();
+  const app = buildApp({}, { store: new OrderStore(':memory:') });
   t.after(() => app.close());
 
   const response = await app.inject({ method: 'GET', url: '/api/not-found' });

@@ -153,3 +153,10 @@ vite.config.ts.timestamp-*
 
 # Private infrastructure handoff: never publish it with the application
 PAYPAL_DELIGHT_INFRA_HANDOFF*.md
+
+# Persistent local purchase data (never include in release artifacts)
+data/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
