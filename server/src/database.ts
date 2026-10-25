@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Product } from "./catalog.js";
 import { AppError } from "./errors.js";
+import type { GiftType } from './gifts/provider.js';
 
 export type OrderStatus =
   | "CREATING"
@@ -37,7 +38,7 @@ export interface Gift {
   id: string;
   order_id: string;
   status: "AVAILABLE" | "GENERATING" | "COMPLETED";
-  result: null | { type: 'caricature'; language: 'en' | 'de'; provider: 'mock' | 'openai'; isDemo: boolean; text: string; width: number; height: number; createdAt: number; imageUrl: string; downloadUrl: string };
+  result: null | { type: GiftType; language: 'en' | 'de'; provider: 'mock' | 'openai'; isDemo: boolean; text: string; width: number; height: number; createdAt: number; imageUrl: string; downloadUrl: string };
 }
 
 export class OrderStore {
@@ -109,6 +110,10 @@ export class OrderStore {
         "Order not found in this browser session.",
       );
     return order;
+  }
+  purchases(owner: string) {
+    const orders = this.db.prepare("SELECT * FROM orders WHERE owner_hash = ? AND status = 'COMPLETED' ORDER BY created_at DESC, id DESC").all(owner) as Order[];
+    return orders.map(order => this.publicOrder(order));
   }
   prepare(owner: string, key: string, product: Product): Order {
     return this.db

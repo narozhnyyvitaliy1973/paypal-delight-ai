@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <g id="face" stroke="#284e40" stroke-width="4" stroke-linecap="round">
+      <ellipse cy="-14" rx="42" ry="48" fill="#e79973"/>
+      <path d="M-41-24q-8-62 45-46 44 4 37 42-16-4-30-25-9 24-52 29Z" fill="#284e40"/>
+      <path d="M-20-10h2m30 0h2m-28 21q14 15 27 0" fill="none"/>
+    </g>
+    <g id="mug" stroke="#284e40" stroke-width="4" stroke-linejoin="round">
+      <path d="M40-29h18c35 0 35 44 0 44H42" fill="none" stroke-width="10"/>
+      <path d="M-40-42h82v71c0 35-82 35-82 0Z" fill="#efb544"/>
+      <ellipse cy="-42" rx="41" ry="9" fill="#fff4d0"/>
+      <path d="m-9-1 8 11 19-22" fill="none"/>
+    </g>
+    <g id="spark" fill="#efb544"><path d="m0-22 6 16 16 6-16 6-6 16-6-16-16-6 16-6Z"/></g>
+  </defs>
+  <rect width="1200" height="900" fill="#f6eee0"/>
+  <g font-family="Arial, sans-serif" fill="#284e40">
+    <text x="44" y="55" font-size="16" letter-spacing="4">PAYPAL DELIGHT AI · MINI COMIC</text>
+    <text x="44" y="112" font-family="Georgia, serif" font-size="48">A little purchase. A big adventure.</text>
+    <text x="46" y="145" font-size="19">Ein kleiner Einkauf. Ein großes Abenteuer.</text>
+    <rect x="1018" y="45" width="136" height="44" rx="22" fill="#284e40"/>
+    <text x="1086" y="73" text-anchor="middle" font-size="18" font-weight="bold" letter-spacing="3" fill="#fff9eb">DEMO</text>
+  </g>
+  <!-- Four self-contained panels in one PNG. -->
+  <g stroke="#284e40" stroke-width="3">
+    <rect x="44" y="179" width="544" height="310" rx="16" fill="#fffaf0"/>
+    <rect x="612" y="179" width="544" height="310" rx="16" fill="#e9efdf"/>
+    <rect x="44" y="513" width="544" height="310" rx="16" fill="#f5ddcc"/>
+    <rect x="612" y="513" width="544" height="310" rx="16" fill="#fff2cb"/>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="15" font-weight="bold" letter-spacing="1" fill="#284e40">
+    <text x="65" y="209">01 · THE FIND / DER FUND</text><text x="633" y="209">02 · THE WAIT / DIE VORFREUDE</text>
+    <text x="65" y="543">03 · THE FIRST SIP / DER ERSTE SCHLUCK</text><text x="633" y="543">04 · SUPERPOWER / SUPERKRAFT</text>
+  </g>
+  <!-- Finding the mug online. -->
+  <g transform="translate(174 331)">
+    <path d="M-52 113v-58q0-38 50-38t50 38v58" fill="#819a77" stroke="#284e40" stroke-width="4"/>
+    <use href="#face"/>
+    <path d="M26 55q30 17 75 2" fill="none" stroke="#284e40" stroke-width="14" stroke-linecap="round"/>
+  </g>
+  <g stroke="#284e40" stroke-width="4" stroke-linejoin="round">
+    <rect x="303" y="275" width="184" height="129" rx="9" fill="#dce7d2"/><path d="M303 404h184l23 20H279Z" fill="#b4c7a6"/>
+    <path d="M79 445h471"/>
+  </g>
+  <use href="#mug" transform="translate(389 340) scale(.7)"/>
+  <path d="M243 247c-20-28-52 4-24 24l24 19 24-19c28-20-4-52-24-24Z" fill="#c76e51"/>
+  <use href="#spark" transform="translate(520 297)"/>
+  <!-- Waiting: imagining a parcel. -->
+  <g transform="translate(770 342)">
+    <path d="M-55 102V55q0-38 53-38t53 38v47" fill="#819a77" stroke="#284e40" stroke-width="4"/>
+    <use href="#face"/>
+    <path d="M-30 57q-47-11-27-56m86 56q44-11 27-56" fill="none" stroke="#284e40" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <g stroke="#284e40" stroke-width="3">
+    <ellipse cx="979" cy="301" rx="102" ry="66" fill="#fffcf4"/><circle cx="877" cy="361" r="12" fill="#fffcf4"/><circle cx="850" cy="381" r="7" fill="#fffcf4"/>
+    <rect x="937" y="269" width="85" height="64" rx="4" fill="#d8b382"/><path d="M977 269v64" stroke="#fff3d6" stroke-width="14"/>
+    <circle cx="1067" cy="415" r="34" fill="#fffaf0"/><path d="M1067 389v26l17 9" fill="none" stroke-linecap="round"/>
+  </g>
+  <!-- A sip from the real mug. -->
+  <g transform="translate(260 673)">
+    <path d="M-58 112V52q0-38 56-38t56 38v60" fill="#819a77" stroke="#284e40" stroke-width="4"/>
+    <use href="#face"/>
+    <path d="M-37 59q-60-20-25-68m92 68q77-9 45-71" fill="none" stroke="#284e40" stroke-width="12" stroke-linecap="round"/>
+    <use href="#mug" transform="translate(35 10) scale(.7)"/>
+  </g>
+  <g stroke="#284e40" stroke-width="3" fill="#fffaf0">
+    <path d="M397 589h104q29 0 29 29v33q0 29-29 29h-49l-28 23 8-23h-35q-29 0-29-29v-33q0-29 29-29Z"/>
+  </g>
+  <text x="449" y="653" font-family="Georgia, serif" font-size="54" text-anchor="middle" fill="#284e40">…!</text>
+  <use href="#spark" transform="translate(140 638)"/>
+  <!-- Suddenly a superhero. The tiny everyday purchase is the superpower. -->
+  <g transform="translate(853 671)">
+    <path d="M-48 20q-54 6-119 114 60-32 107-5l45-88Z" fill="#cd7456" stroke="#284e40" stroke-width="3"/>
+    <path d="M-51 105V52q0-38 49-38t49 38v53" fill="#819a77" stroke="#284e40" stroke-width="4"/>
+    <use href="#face"/>
+    <path d="M-28 52-74 20m102 32 71-66" fill="none" stroke="#284e40" stroke-width="12" stroke-linecap="round"/>
+    <path d="m0 43 6 16 16 6-16 6-6 16-6-16-16-6 16-6Z" fill="#fff2cb"/>
+    <use href="#mug" transform="translate(119 -31) scale(.85)"/>
+  </g>
+  <g stroke="#d5a64c" stroke-width="5" stroke-linecap="round"><path d="m1036 577 13-13m6 68 24-2m-61 56 15 13m-286-109-16-17m-10 80-21-3"/></g>
+  <use href="#spark" transform="translate(1083 749)"/>
+  <text x="600" y="863" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" fill="#284e40">Everyday magic. / Alltagszauber. · DEMO</text>
+</svg>

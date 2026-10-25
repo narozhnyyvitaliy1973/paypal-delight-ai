@@ -159,7 +159,7 @@ test(
         );
         assert.equal(
           await f.page.locator(".gift-options button:disabled").count(),
-          2,
+          0,
         );
         await f.page.screenshot({
           path: `${screenshots}/purchase-success.png`,
@@ -307,7 +307,7 @@ test(
       await pay(f.page);
       await f.page.getByRole('heading', { name: 'Feiere deinen Einkauf!' }).waitFor();
       assert.match(await f.page.locator('.celebration-copy').textContent(), /Morgensonne-Tasse/);
-      assert.equal(await f.page.locator('.gift-options button:disabled').count(), 2);
+      assert.equal(await f.page.locator('.gift-options button:disabled').count(), 0);
       await f.page.getByText('Dein persönliches KI-Geschenk ist verfügbar.', { exact: true }).waitFor();
       await f.page.screenshot({ path: `${screenshots}/celebrate-de.png`, fullPage: true });
       await language.selectOption('en');
@@ -321,6 +321,9 @@ test(
       await language.selectOption('de');
       await f.page.getByRole('heading', { name: 'Datenschutzerklärung', exact: true }).waitFor();
       await f.page.getByRole('link', { name: 'Zurück zum Shop', exact: true }).click();
+      await f.page.getByRole('heading', { name: 'Morgensonne-Tasse' }).waitFor();
+      // The store stays open for a new purchase; earlier paid orders have explicit links.
+      await f.page.getByRole('link', { name: 'Zurück zu deinem letzten Geschenk' }).click();
       await f.page.getByRole('heading', { name: 'Feiere deinen Einkauf!' }).waitFor();
       assert.equal(f.sandbox.orders.size, 1);
       assert.equal(f.sandbox.captureKeys.length, 1);
@@ -512,6 +515,256 @@ test(
       await f.page.reload();
       await f.page.getByTestId('gift-progress').waitFor();
       release(); await f.page.getByTestId('gift-result').waitFor();
+      assert.deepEqual(f.errors, []);
+    });
+
+    for (const mode of ['greeting-card', 'mini-comic']) {
+      for (const language of ['en', 'de']) {
+        await t.test(`${mode} in ${language}: required fields, preview, PNG, reload and cross-mode protection`, async t => {
+          let observed, calls = 0, release;
+          const gate = new Promise(resolve => { release = resolve; });
+          t.after(() => release());
+          const mock = new MockGiftProvider();
+          const f = await pageFixture(t, 'approve', { locale: `${language}-${language === 'de' ? 'DE' : 'US'}`, fixture: { giftProvider: { name: 'mock', generate: async input => {
+            calls++; observed = input; await gate; return mock.generate(input);
+          } } } });
+          const de = language === 'de', card = mode === 'greeting-card';
+          await pay(f.page);
+          await f.page.getByTestId(`choose-${mode}`).waitFor();
+          assert.equal(await f.page.locator('.gift-options button:enabled').count(), 3);
+          const outgoing = [], consoleErrors = [];
+          f.page.on('request', r => { if (new URL(r.url()).origin !== f.origin) outgoing.push(r.url()); });
+          f.page.on('console', message => { if (['warning', 'error'].includes(message.type())) consoleErrors.push(message.text()); });
+          await f.page.getByTestId(`choose-${mode}`).click();
+          assert.equal(await f.page.locator('input[type=file]').count(), 0);
+          const nameLabel = card ? (de ? 'Name der beschenkten Person' : 'Recipient name') : (de ? 'Name der Comicfigur' : 'Character name');
+          const name = f.page.getByLabel(nameLabel, { exact: true });
+          await f.page.getByTestId('create-gift').click();
+          assert.equal(calls, 0);
+          assert.equal(await name.evaluate(input => input.validity.valueMissing), true);
+          assert.equal(await name.getAttribute('maxlength'), '80');
+          await name.fill('   ');
+          if (card) await f.page.getByLabel(de ? 'Anlass' : 'Occasion', { exact: true }).fill('Birthday');
+          await f.page.getByTestId('create-gift').click();
+          await f.page.getByRole('alert').waitFor();
+          assert.equal(calls, 0);
+          await name.fill('Alex');
+          const wishesLabel = card ? (de ? 'Deine Wünsche (optional)' : 'Your wishes (optional)') : (de ? 'Wünsche zur Handlung (optional)' : 'Story wishes (optional)');
+          await f.page.getByLabel(wishesLabel, { exact: true }).fill('A tiny adventure');
+          await f.page.setViewportSize(de ? { width: 390, height: 844 } : { width: 1360, height: 1000 });
+          assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+          await f.page.screenshot({ path: `${screenshots}/${mode}-form-${language}.png`, fullPage: true });
+          await f.page.getByTestId('create-gift').click();
+          await f.page.getByTestId('gift-progress').waitFor();
+          assert.equal(await f.page.getByTestId('change-gift-mode').isDisabled(), true);
+          assert.equal(await f.page.getByTestId('create-gift').isDisabled(), true);
+          // Both new modes recover a generation in progress after a real page reload.
+          await f.page.reload(); await f.page.getByTestId('gift-progress').waitFor();
+          release(); await f.page.getByTestId('gift-result').waitFor();
+          assert.equal(observed.type, mode); assert.equal(observed.language, language);
+          assert.equal(observed.wishes, 'A tiny adventure');
+          assert.deepEqual(observed.product, { id: 'daybreak-mug', name: 'Daybreak Mug' });
+          assert.equal(observed.photo, undefined);
+          assert.equal(observed[card ? 'recipientName' : 'characterName'], 'Alex');
+          if (card) assert.equal(observed.occasion, 'Birthday');
+          assert.match(await f.page.getByTestId('gift-mode').innerText(), new RegExp(card ? (de ? 'Grußkarte' : 'Greeting Card') : (de ? 'Mini-Comic' : 'Mini Comic')));
+          assert.match(await f.page.getByTestId('gift-mode').innerText(), /DEMO/);
+          await f.page.locator('.gift-image').evaluate(image => image.decode());
+          const pendingDownload = f.page.waitForEvent('download');
+          await f.page.getByTestId('gift-download').click();
+          const download = await pendingDownload;
+          assert.match(download.suggestedFilename(), new RegExp(`^delight-${mode}-[a-f0-9-]+\\.png$`));
+          assert.deepEqual(await readFile(await download.path()), await readFile(new URL(`../server/dist/assets/mock-${mode}.png`, import.meta.url)));
+          await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
+          assert.equal(await f.page.getByTestId('language-switch').inputValue(), language);
+          assert.equal(await f.page.locator('.gift-options').count(), 0);
+          assert.equal(await f.page.getByTestId('change-gift-mode').count(), 0);
+          const id = new URL(f.page.url()).searchParams.get('order');
+          const saved = f.store.gift(id);
+          const replay = await f.page.evaluate(async id => {
+            const response = await fetch(`/api/orders/${id}/gift`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'caricature', language: 'en', wishes: 'Another gift?' }),
+            });
+            return { status: response.status, order: await response.json() };
+          }, id);
+          assert.equal(replay.status, 200); assert.deepEqual(replay.order.gift, saved);
+          assert.equal(calls, 1); assert.equal(f.sandbox.captureKeys.length, 1);
+          await f.page.screenshot({ path: `${screenshots}/${mode}-result-${language}.png`, fullPage: true });
+          assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+          // Reloading the store still loads its existing PayPal SDK; no AI or other external requests.
+          assert.ok(outgoing.every(url => url === 'https://www.sandbox.paypal.com/web-sdk/v6/core'));
+          assert.deepEqual(consoleErrors, []); assert.deepEqual(f.errors, []);
+        });
+      }
+    }
+
+    await t.test('switching modes discards photo and names; failed comic can be retried as a card', async t => {
+      let calls = 0, observed;
+      const mock = new MockGiftProvider();
+      const f = await pageFixture(t, 'approve', { fixture: { giftProvider: { name: 'mock', generate: async input => {
+        observed = input; if (++calls === 1) throw new Error('provider unavailable'); return mock.generate(input);
+      } } } });
+      await pay(f.page); await f.page.getByTestId('choose-caricature').click();
+      await f.page.getByRole('checkbox').check();
+      await f.page.locator('input[type=file]').setInputFiles({ name: 'portrait.png', mimeType: 'image/png', buffer: await readFile(new URL('../server/dist/assets/mock-caricature.png', import.meta.url)) });
+      await f.page.getByTestId('change-gift-mode').click();
+      await f.page.getByTestId('choose-mini-comic').click();
+      await f.page.getByLabel('Character name', { exact: true }).fill('Alex');
+      await f.page.getByTestId('create-gift').click();
+      await f.page.getByText('Gift creation failed. Your right is still available. Please try again.', { exact: true }).waitFor();
+      assert.equal(observed.photo, undefined);
+      const id = new URL(f.page.url()).searchParams.get('order');
+      assert.equal(f.store.gift(id).status, 'AVAILABLE');
+      await f.page.getByTestId('change-gift-mode').click();
+      await f.page.getByTestId('choose-greeting-card').click();
+      await f.page.getByLabel('Recipient name', { exact: true }).fill('Sam');
+      await f.page.getByLabel('Occasion', { exact: true }).fill('Thank you');
+      await f.page.getByTestId('create-gift').click();
+      await f.page.getByTestId('gift-result').waitFor();
+      assert.equal(observed.characterName, undefined); assert.equal(observed.photo, undefined);
+      assert.equal(f.store.gift(id).result.type, 'greeting-card');
+      assert.equal(calls, 2); assert.equal(f.store.db.prepare('SELECT COUNT(*) n FROM gift_images').get().n, 1);
+      assert.deepEqual(f.errors, []);
+    });
+
+    await t.test('three consecutive purchases in one browser have independent gifts after reload', async t => {
+      const f = await pageFixture(t);
+      const saved = [];
+      for (const [index, type] of ['caricature', 'greeting-card', 'mini-comic'].entries()) {
+        if (index > 0) {
+          if (index === 1) await f.page.getByRole('button', { name: 'Back to the store' }).click();
+          else await f.page.locator('.brand').click();
+          await f.page.getByRole('button', { name: 'PayPal', exact: true }).waitFor();
+        }
+        await f.page.locator('.product-card').nth(index).getByRole('button').click();
+        await pay(f.page);
+        await f.page.getByTestId(`choose-${type}`).waitFor();
+        const id = new URL(f.page.url()).searchParams.get('order');
+        assert.ok(!saved.some(order => order.id === id));
+        assert.equal(f.store.get(id).status, 'COMPLETED');
+        assert.equal(f.store.gift(id).status, 'AVAILABLE');
+        assert.equal(await f.page.evaluate(() => sessionStorage.getItem('delight-checkout')), null);
+        await f.page.getByTestId(`choose-${type}`).click();
+        if (type === 'greeting-card') {
+          await f.page.getByLabel('Recipient name', { exact: true }).fill('Alex');
+          await f.page.getByLabel('Occasion', { exact: true }).fill('Thank you');
+        }
+        if (type === 'mini-comic') await f.page.getByLabel('Character name', { exact: true }).fill('Sam');
+        await f.page.getByTestId('create-gift').click();
+        await f.page.getByTestId('gift-result').waitFor();
+        const gift = f.store.gift(id);
+        assert.equal(gift.result.type, type);
+        saved.push({ id, gift });
+        if (index > 0) { await f.page.reload(); await f.page.getByTestId('gift-result').waitFor(); }
+        assert.equal(f.store.gift(id).result.type, type);
+      }
+      assert.equal(f.sandbox.captureKeys.length, 3);
+      assert.equal(new Set(saved.map(({ id }) => f.store.get(id).owner_hash)).size, 1);
+      await f.page.goto(f.origin);
+      await f.page.getByTestId('purchase-history').locator('summary').click();
+      await f.page.getByTestId('purchase-history').screenshot({ path: `${screenshots}/purchase-history-en.png` });
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      await f.page.getByTestId('language-switch').selectOption('de');
+      assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await f.page.getByTestId('purchase-history').screenshot({ path: `${screenshots}/purchase-history-de-mobile.png` });
+      await f.page.getByTestId('language-switch').selectOption('en');
+      for (const { id, gift } of saved) {
+        await f.page.goto(f.origin);
+        await f.page.getByTestId('purchase-history').locator('summary').click();
+        assert.equal(await f.page.locator('.purchase-history li').count(), 3);
+        await f.page.getByTestId(`purchase-${id}`).click();
+        await f.page.getByTestId('gift-result').waitFor();
+        assert.equal(new URL(f.page.url()).searchParams.get('order'), id);
+        assert.deepEqual(f.store.gift(id), gift);
+        assert.match(await f.page.locator('.gift-image').getAttribute('src'), new RegExp(id));
+      }
+      assert.deepEqual(f.errors, []);
+    });
+
+    await t.test('opening an old gift never rewrites a newer unfinished checkout', async t => {
+      const f = await pageFixture(t);
+      await pay(f.page); await f.page.getByTestId('choose-caricature').waitFor();
+      const first = new URL(f.page.url()).searchParams.get('order');
+      await f.page.getByRole('button', { name: 'Back to the store' }).click();
+      await f.page.evaluate(() => { window.testScenario = 'error'; });
+      await pay(f.page);
+      await f.page.getByText('PayPal checkout was interrupted.', { exact: false }).waitFor();
+      const active = await f.page.evaluate(() => JSON.parse(sessionStorage.getItem('delight-checkout')));
+      assert.notEqual(active.orderId, first);
+      await f.page.goto(`${f.origin}/?order=${first}`);
+      await f.page.getByTestId('choose-caricature').waitFor();
+      assert.deepEqual(await f.page.evaluate(() => JSON.parse(sessionStorage.getItem('delight-checkout'))), active);
+      await f.page.getByRole('button', { name: 'Back to the store' }).click();
+      await f.page.reload();
+      await f.page.locator('.order-reference').filter({ hasText: active.orderId }).waitFor();
+      assert.equal(new URL(f.page.url()).searchParams.get('order'), active.orderId);
+      await pay(f.page); await f.page.getByTestId('choose-greeting-card').waitFor();
+      assert.equal(new URL(f.page.url()).searchParams.get('order'), active.orderId);
+      assert.equal(f.sandbox.orders.size, 2);
+    });
+
+    await t.test('legacy completed recovery cannot hijack a fresh checkout; all paid rights remain in history', async t => {
+      const f = await pageFixture(t);
+      const requests = [];
+      f.page.on('request', r => { if (r.method() === 'POST' && r.url().endsWith('/api/orders')) requests.push(r.postDataJSON()); });
+      await pay(f.page); await f.page.getByTestId('choose-caricature').waitFor();
+      const oldId = new URL(f.page.url()).searchParams.get('order');
+      await f.page.evaluate(({ id, attempt }) => {
+        sessionStorage.setItem('delight-checkout', JSON.stringify({ ...attempt, orderId: id }));
+        sessionStorage.setItem('delight-last-gift-order', id);
+      }, { id: oldId, attempt: requests[0] });
+      await f.page.goto(f.origin);
+      await f.page.getByRole('button', { name: 'PayPal', exact: true }).waitFor();
+      assert.equal(new URL(f.page.url()).searchParams.get('order'), null);
+      assert.equal(await f.page.evaluate(() => sessionStorage.getItem('delight-checkout')), null);
+      await pay(f.page); await f.page.getByTestId('choose-mini-comic').waitFor();
+      const newId = new URL(f.page.url()).searchParams.get('order');
+      assert.notEqual(newId, oldId); assert.notEqual(requests[0].requestId, requests[1].requestId);
+      assert.equal(f.store.gift(oldId).status, 'AVAILABLE');
+      assert.equal(f.store.gift(newId).status, 'AVAILABLE');
+      await f.page.reload(); await f.page.getByTestId('choose-mini-comic').waitFor();
+      assert.equal(new URL(f.page.url()).searchParams.get('order'), newId);
+      await f.page.getByRole('button', { name: 'Back to the store' }).click();
+      await f.page.getByTestId('purchase-history').locator('summary').click();
+      assert.equal(await f.page.locator('.purchase-history li').count(), 2);
+      await f.page.getByTestId('language-switch').selectOption('de');
+      await f.page.getByText('Deine Einkäufe & Geschenke', { exact: false }).waitFor();
+      await f.page.getByTestId(`purchase-${newId}`).click();
+      await f.page.getByTestId('choose-mini-comic').waitFor();
+      assert.equal(new URL(f.page.url()).searchParams.get('order'), newId);
+      assert.equal(f.sandbox.captureKeys.length, 2);
+      assert.deepEqual(f.errors, []);
+    });
+
+    await t.test('late recovery from a previous gift cannot replace the next paid order', async t => {
+      const f = await pageFixture(t);
+      await pay(f.page); await f.page.getByTestId('choose-caricature').click();
+      const firstId = new URL(f.page.url()).searchParams.get('order');
+      let release, entered;
+      const gate = new Promise(resolve => { release = resolve; });
+      const started = new Promise(resolve => { entered = resolve; });
+      t.after(() => release());
+      await f.page.route(`**/api/orders/${firstId}/gift`, async route => {
+        const response = await route.fetch();
+        if (route.request().method() === 'POST') return route.abort('failed');
+        entered(); await gate; await route.fulfill({ response });
+      });
+      await f.page.getByTestId('create-gift').click();
+      await started;
+      assert.equal(f.store.gift(firstId).status, 'COMPLETED');
+      await f.page.getByRole('button', { name: 'Back to the store' }).click();
+      await pay(f.page); await f.page.getByTestId('choose-greeting-card').waitFor();
+      const secondId = new URL(f.page.url()).searchParams.get('order');
+      assert.notEqual(secondId, firstId);
+      release();
+      await f.page.waitForLoadState('networkidle');
+      assert.equal(await f.page.getByTestId('gift-result').count(), 0);
+      assert.equal(await f.page.getByTestId('choose-greeting-card').isVisible(), true);
+      assert.equal(new URL(f.page.url()).searchParams.get('order'), secondId);
+      assert.equal(f.store.gift(secondId).status, 'AVAILABLE');
+      await f.page.reload(); await f.page.getByTestId('choose-greeting-card').waitFor();
+      assert.equal(f.sandbox.captureKeys.length, 2);
       assert.deepEqual(f.errors, []);
     });
 

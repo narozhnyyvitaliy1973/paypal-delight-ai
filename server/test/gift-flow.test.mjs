@@ -8,8 +8,13 @@ import { fixture } from './helpers.mjs';
 import { MockGiftProvider } from '../dist/gifts/provider.js';
 
 const body = { type: 'caricature', language: 'en', wishes: 'A sunny morning' };
-const paid = async f => {
-  const order = await f.create();
+const inputs = {
+  caricature: body,
+  'greeting-card': { ...body, type: 'greeting-card', recipientName: 'PRIVATE-RECIPIENT', occasion: 'PRIVATE-OCCASION' },
+  'mini-comic': { ...body, type: 'mini-comic', characterName: 'PRIVATE-CHARACTER' },
+};
+const paid = async (f, productId) => {
+  const order = await f.create(productId);
   f.sandbox.approve(order.paypalOrderId);
   const capture = await f.send(`/orders/${order.id}/capture`);
   assert.equal(capture.statusCode, 200);
@@ -130,7 +135,7 @@ test('result saving failure rolls back image and entitlement together', async t 
   assert.equal((await create(f, order)).json().gift.status, 'COMPLETED');
 });
 
-test('parallel requests across two SQLite connections invoke provider once', async t => {
+test('parallel requests for different modes across two SQLite connections invoke provider once', async t => {
   const path = await temporary(t);
   let release, entered;
   const gate = new Promise(resolve => { release = resolve; });
@@ -143,17 +148,19 @@ test('parallel requests across two SQLite connections invoke provider once', asy
   const order = await paid(first);
   const second = await fixture(t, { path, cookie: first.cookie, sandbox: first.sandbox, giftProvider: provider });
   cleanup(t, path);
-  const pending = create(first, order); await started;
-  const repeats = await Promise.all(Array.from({ length: 8 }, () => create(second, order)));
+  const pending = create(first, order, inputs['greeting-card']); await started;
+  const repeats = await Promise.all(Array.from({ length: 9 }, (_, i) => create(second, order, Object.values(inputs)[i % 3])));
   assert.ok(repeats.every(r => r.statusCode === 202 && r.json().gift.status === 'GENERATING'));
   assert.equal((await second.get(`/orders/${order.id}/gift/image`)).statusCode, 409);
   assert.equal(calls, 1);
-  release(); assert.equal((await pending).json().gift.status, 'COMPLETED');
-  assert.equal((await create(second, order)).json().gift.status, 'COMPLETED');
+  release();
+  const saved = (await pending).json().gift;
+  assert.equal(saved.status, 'COMPLETED'); assert.equal(saved.result.type, 'greeting-card');
+  assert.deepEqual((await create(second, order, inputs['mini-comic'])).json().gift, saved);
   assert.equal(calls, 1); assert.equal(count(first, 'gift_images'), 1);
 });
 
-test('restart restores saved result and identical mock images are stored only once', async t => {
+test('v2 restart preserves payments and all three saved modes, with one PNG per mode', async t => {
   const path = await temporary(t);
   const first = await fixture(t, { path });
   const one = await paid(first); const two = await paid(first);
@@ -161,13 +168,31 @@ test('restart restores saved result and identical mock images are stored only on
   await create(first, two);
   assert.equal(count(first, 'gift_images'), 1);
   assert.equal(count(first, 'gift_entitlements'), 2);
+  const schema = first.store.db.prepare("SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").all();
+  const snapshots = [result];
+  for (const input of Object.values(inputs).slice(1)) {
+    const order = await paid(first);
+    snapshots.push((await create(first, order, input)).json());
+    await create(first, await paid(first), input);
+  }
+  const payments = first.store.db.prepare('SELECT * FROM orders ORDER BY id').all();
+  assert.equal(count(first, 'gift_images'), 3);
+  assert.equal(count(first, 'gift_entitlements'), 6);
   const cookie = first.cookie;
   await first.app.close();
   const next = await fixture(t, { path, cookie, giftProvider: { name: 'mock', generate: () => assert.fail('Saved gift must not be generated again') } });
   cleanup(t, path);
-  assert.deepEqual((await next.get(`/orders/${one.id}/gift`)).json(), result);
-  assert.deepEqual((await create(next, one)).json(), result);
-  assert.equal((await next.get(`/orders/${one.id}/gift/download`)).statusCode, 200);
+  assert.equal(next.store.db.pragma('user_version', { simple: true }), 2);
+  assert.deepEqual(next.store.db.prepare("SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").all(), schema);
+  assert.deepEqual(next.store.db.prepare('SELECT * FROM orders ORDER BY id').all(), payments);
+  for (const saved of snapshots) {
+    assert.deepEqual((await next.get(`/orders/${saved.id}/gift`)).json(), saved);
+    for (const input of Object.values(inputs)) assert.deepEqual((await create(next, saved, input)).json(), saved);
+    const download = await next.get(`/orders/${saved.id}/gift/download`);
+    assert.equal(download.statusCode, 200);
+    assert.deepEqual(download.rawPayload, await readFile(new URL(`../dist/assets/mock-${saved.gift.result.type}.png`, import.meta.url)));
+  }
+  assert.equal(count(next, 'gift_images'), 3);
 });
 
 test('expired crash lease is recovered after restart; a stale worker cannot overwrite a newer result', async t => {
@@ -189,7 +214,7 @@ test('expired crash lease is recovered after restart; a stale worker cannot over
   next.store.db.prepare('UPDATE gift_entitlements SET lock_until = 0').run();
   const other = await fixture(t, { path, cookie: first.cookie });
   cleanup(t, path);
-  const saved = (await create(other, order, { ...body, language: 'de' })).json().gift;
+  const saved = (await create(other, order, { ...inputs['mini-comic'], language: 'de' })).json().gift;
   assert.equal(saved.status, 'COMPLETED');
   release(); assert.equal((await stale).statusCode, 409);
   assert.deepEqual(next.store.gift(order.id), saved);
@@ -217,7 +242,7 @@ test('version 1 migration preserves payment rows and existing gift entitlement I
   assert.equal((await create(migrated, order)).json().gift.status, 'COMPLETED');
 });
 
-test('gift request validation, origin, photo limits and unavailable modes never consume the entitlement', async t => {
+test('gift request validation, origin, photo limits and missing fields never consume the entitlement', async t => {
   const f = await fixture(t);
   const order = await paid(f);
   const image = await sharp({ create: { width: 4001, height: 4000, channels: 3, background: 'red' } }).png().toBuffer();
@@ -238,4 +263,154 @@ test('gift request validation, origin, photo limits and unavailable modes never 
   assert.equal((await f.send(`/orders/${order.id}/gift`, body, { headers: { cookie: f.cookie, origin: 'https://foreign.example', 'content-type': 'application/json' } })).statusCode, 403);
   assert.equal((await create(f, order, { ...body, wishes: 'x'.repeat(7 * 1024 * 1024) })).statusCode, 413);
   assert.equal(count(f, 'gift_images'), 0);
+});
+
+for (const type of Object.keys(inputs)) {
+  test(`${type}: EN/DE provider inputs, PNG preview/download, ownership and cross-mode replay`, async t => {
+    let calls = 0, observed;
+    const mock = new MockGiftProvider();
+    const f = await fixture(t, { giftProvider: { name: 'mock', generate: async input => {
+      calls++; observed = input; return mock.generate(input);
+    } } });
+    const asset = await readFile(new URL(`../dist/assets/mock-${type}.png`, import.meta.url));
+    for (const language of ['en', 'de']) {
+      const order = await paid(f, language === 'de' ? 'weekend-tote' : 'daybreak-mug');
+      const payment = f.store.get(order.id);
+      const input = { ...inputs[type], language, wishes: 'PRIVATE-WISH' };
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = () => assert.fail('No external API calls during gift generation');
+      let created;
+      try { created = await create(f, order, input); } finally { globalThis.fetch = originalFetch; }
+      assert.equal(created.statusCode, 200, created.body);
+      const gift = created.json().gift;
+      assert.equal(gift.status, 'COMPLETED');
+      assert.equal(gift.result.type, type); assert.equal(gift.result.language, language);
+      assert.equal(gift.result.provider, 'mock'); assert.equal(gift.result.isDemo, true);
+      assert.deepEqual(observed.product, order.product);
+      for (const [key, value] of Object.entries(input)) assert.equal(observed[key], value);
+      assert.equal(observed.photo, undefined);
+      const metadata = await sharp(asset).metadata();
+      assert.equal(gift.result.width, metadata.width); assert.equal(gift.result.height, metadata.height);
+      assert.equal(metadata.format, 'png'); assert.equal(metadata.exif, undefined);
+      for (const suffix of ['image', 'download']) {
+        const image = await f.get(`/orders/${order.id}/gift/${suffix}`);
+        assert.equal(image.statusCode, 200); assert.equal(image.headers['content-type'], 'image/png');
+        assert.deepEqual(image.rawPayload, asset);
+        assert.ok(image.headers['content-disposition'].includes(`delight-${type}-${order.id}.png`));
+        const stranger = (await f.app.inject('/api/store')).headers['set-cookie'].split(';')[0];
+        assert.equal((await f.get(`/orders/${order.id}/gift/${suffix}`, { headers: { cookie: stranger } })).statusCode, 404);
+        assert.equal((await f.send(`/orders/${order.id}/gift`, input, { headers: { cookie: stranger, origin: f.settings.origin, 'content-type': 'application/json' } })).statusCode, 404);
+      }
+      for (const other of Object.values(inputs)) assert.deepEqual((await create(f, order, other)).json().gift, gift);
+      const row = f.store.db.prepare('SELECT * FROM gift_entitlements WHERE order_id = ?').get(order.id);
+      assert.equal(row.mode, type); assert.equal(row.status, 'GENERATED'); assert.equal(row.lock_token, null);
+      assert.ok(!JSON.stringify(row).includes('PRIVATE-'));
+      assert.deepEqual(f.store.get(order.id), payment);
+      assert.deepEqual((await f.send(`/orders/${order.id}/capture`)).json().gift, gift);
+    }
+    assert.equal(calls, 2); assert.equal(count(f, 'gift_images'), 1);
+    assert.equal(count(f, 'gift_entitlements'), 2); assert.equal(f.sandbox.captureKeys.length, 2);
+  });
+}
+
+test('mode-specific personalization is validated before generation and cannot consume a right', async t => {
+  let calls = 0;
+  const mock = new MockGiftProvider();
+  const f = await fixture(t, { giftProvider: { name: 'mock', generate: async input => { calls++; return mock.generate(input); } } });
+  const order = await paid(f);
+  const card = inputs['greeting-card'], comic = inputs['mini-comic'];
+  for (const input of [
+    { ...body, type: 'unknown' }, { ...card, recipientName: '' }, { ...card, recipientName: '   ' },
+    { ...card, recipientName: 'x'.repeat(81) }, { ...card, recipientName: {} },
+    { ...card, occasion: undefined }, { ...card, occasion: '   ' }, { ...card, occasion: 'x'.repeat(121) },
+    { ...comic, characterName: undefined }, { ...comic, characterName: '   ' },
+    { ...comic, characterName: 'x'.repeat(81) }, { ...comic, characterName: {} },
+    { ...card, characterName: 'unused' }, { ...comic, recipientName: 'unused' },
+    { ...body, occasion: 'unused' }, { ...comic, wishes: 'x'.repeat(501) },
+    ...[card, comic].map(input => ({ ...input, photo: { data: 'AAAA', contentType: 'image/png', consent: true } })),
+  ]) {
+    const response = await create(f, order, input);
+    assert.equal(response.statusCode, 400, response.body);
+    assert.equal(f.store.gift(order.id).status, 'AVAILABLE');
+  }
+  assert.equal(calls, 0); assert.equal(count(f, 'gift_images'), 0);
+  const accepted = await create(f, order, { ...card, recipientName: 'x'.repeat(80), occasion: 'x'.repeat(120), wishes: 'x'.repeat(500) });
+  assert.equal(accepted.statusCode, 200, accepted.body); assert.equal(calls, 1);
+});
+
+test('new mode failures preserve the right to choose another mode; mismatched provider output is rejected', async t => {
+  for (const type of ['greeting-card', 'mini-comic']) {
+    const mock = new MockGiftProvider();
+    let calls = 0;
+    const f = await fixture(t, { giftProvider: { name: 'mock', generate: async input => {
+      if (++calls === 1) throw new Error('provider unavailable');
+      if (calls === 2) return mock.generate({ ...body, product: input.product });
+      return mock.generate(input);
+    } } });
+    const order = await paid(f);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const failed = await create(f, order, inputs[type]);
+      assert.equal(failed.statusCode, 503);
+      assert.equal(f.store.gift(order.id).status, 'AVAILABLE'); assert.equal(count(f, 'gift_images'), 0);
+    }
+    const other = type === 'greeting-card' ? 'mini-comic' : 'greeting-card';
+    const saved = (await create(f, order, inputs[other])).json().gift;
+    assert.equal(saved.status, 'COMPLETED'); assert.equal(saved.result.type, other);
+    assert.deepEqual((await create(f, order, inputs[type])).json().gift, saved);
+    assert.equal(calls, 3); assert.equal(count(f, 'gift_images'), 1);
+  }
+});
+
+test('one session buys three times: separate rights, parallel replays, private history and restart', async t => {
+  const path = await temporary(t);
+  let calls = 0, release, entered;
+  const mock = new MockGiftProvider();
+  const first = await fixture(t, { path, giftProvider: { name: 'mock', generate: async input => {
+    calls++; entered(); await new Promise(resolve => { release = resolve; });
+    return mock.generate(input);
+  } } });
+  t.after(() => release?.());
+  const saved = [];
+  for (const input of Object.values(inputs)) {
+    const order = await paid(first);
+    assert.equal(first.store.gift(order.id).status, 'AVAILABLE');
+    const started = new Promise(resolve => { entered = resolve; });
+    const pending = create(first, order, input);
+    await started;
+    const parallel = await Promise.all(Object.values(inputs).map(other => create(first, order, other)));
+    assert.ok(parallel.every(r => r.statusCode === 202));
+    release();
+    const response = await pending;
+    assert.equal(response.statusCode, 200);
+    const gift = response.json().gift;
+    assert.equal(gift.status, 'COMPLETED'); assert.equal(gift.result.type, input.type);
+    for (const other of Object.values(inputs)) assert.deepEqual((await create(first, order, other)).json().gift, gift);
+    saved.push({ order, gift });
+    for (const previous of saved) assert.deepEqual(first.store.gift(previous.order.id), previous.gift);
+  }
+  assert.equal(calls, 3); assert.equal(first.sandbox.captureKeys.length, 3);
+  assert.equal(new Set(saved.map(({ order }) => order.id)).size, 3);
+  assert.equal(new Set(saved.map(({ gift }) => gift.id)).size, 3);
+  assert.equal(first.store.db.prepare('SELECT COUNT(DISTINCT owner_hash) n FROM orders').get().n, 1);
+  const available = await paid(first);
+  await first.create(); // An unpaid order must not appear among purchases.
+  const history = (await first.get('/orders')).json();
+  assert.equal(history.length, 4);
+  assert.equal(history.find(item => item.id === available.id).gift.status, 'AVAILABLE');
+  const stranger = (await first.app.inject('/api/store')).headers['set-cookie'].split(';')[0];
+  assert.deepEqual((await first.get('/orders', { headers: { cookie: stranger } })).json(), []);
+  assert.equal((await first.get('/orders', { headers: { cookie: '' } })).statusCode, 401);
+  await first.app.close();
+  const next = await fixture(t, { path, cookie: first.cookie, giftProvider: { name: 'mock', generate: () => assert.fail('Completed gifts must survive restart') } });
+  cleanup(t, path);
+  assert.deepEqual((await next.get('/orders')).json(), history);
+  for (const { order, gift } of saved) {
+    assert.deepEqual((await next.get(`/orders/${order.id}/gift`)).json().gift, gift);
+    assert.deepEqual((await create(next, order, inputs['mini-comic'])).json().gift, gift);
+    const download = await next.get(`/orders/${order.id}/gift/download`);
+    assert.equal(download.statusCode, 200);
+    assert.deepEqual(download.rawPayload, await readFile(new URL(`../dist/assets/mock-${gift.result.type}.png`, import.meta.url)));
+  }
+  assert.equal(next.store.gift(available.id).status, 'AVAILABLE');
+  assert.equal(count(next, 'gift_entitlements'), 4); assert.equal(count(next, 'gift_images'), 3);
 });

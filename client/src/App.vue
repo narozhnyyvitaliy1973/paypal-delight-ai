@@ -29,7 +29,10 @@ const store = ref<Store>();
 const selected = ref<Product>();
 const order = ref<Order>();
 const celebration = ref<Order>();
-const lastGiftOrder = ref('');
+const purchases = ref<Order[]>([]);
+const purchasesError = ref('');
+const lastGiftOrder = computed(() => purchases.value[0]?.id);
+let giftViewRevision = 0;
 const busy = ref(false);
 const loading = ref(true);
 const message = ref("");
@@ -73,16 +76,42 @@ function persist() {
   try {
     if (attempt)
       sessionStorage.setItem("delight-checkout", JSON.stringify(attempt));
+    else sessionStorage.removeItem('delight-checkout');
   } catch {
     /* Cookie remains authoritative. */
   }
 }
+async function loadPurchases() {
+  try {
+    purchases.value = await api<Order[]>('/orders');
+    purchasesError.value = '';
+  } catch { purchasesError.value = 'gift.historyError'; }
+}
+function rememberPurchase(value: Order) {
+  const index = purchases.value.findIndex(item => item.id === value.id);
+  if (index < 0) purchases.value.unshift(value);
+  else purchases.value[index] = value;
+}
+async function showGift(value: Order) {
+  const revision = ++giftViewRevision;
+  const confirmed = await api<Order>(`/orders/${value.id}/gift`);
+  if (revision !== giftViewRevision) return;
+  if (confirmed.id !== value.id || confirmed.status !== 'COMPLETED' || !confirmed.gift)
+    throw new ApiError('PAYMENT_REQUIRED', '');
+  celebration.value = confirmed;
+  rememberPurchase(confirmed);
+  message.value = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function updateGift(value: Order) {
+  // A delayed reply from an unmounted gift form must never replace another purchase.
+  if (celebration.value?.id !== value.id) return;
+  celebration.value = value;
+  if (order.value?.id === value.id) order.value = value;
+  rememberPurchase(value);
+}
 async function acceptOrder(value: Order) {
   order.value = value;
-  if (attempt) {
-    attempt.orderId = value.id;
-    persist();
-  }
   // Preserve SDK return parameters until hasReturned()/resume() have consumed them.
   const locationUrl = new URL(window.location.href);
   locationUrl.searchParams.set("order", value.id);
@@ -92,14 +121,9 @@ async function acceptOrder(value: Order) {
     `${locationUrl.pathname}${locationUrl.search}${locationUrl.hash}`,
   );
   if (value.status === "COMPLETED") {
-    const confirmed = await api<Order>(`/orders/${value.id}/gift`);
-    if (confirmed.status !== "COMPLETED" || !confirmed.gift)
-      throw new ApiError('PAYMENT_REQUIRED', '');
-    celebration.value = confirmed;
-    lastGiftOrder.value = value.id;
-    try { sessionStorage.setItem('delight-last-gift-order', value.id); } catch { /* Optional shortcut. */ }
-    message.value = "";
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (attempt?.orderId === value.id) { attempt = undefined; persist(); }
+    rememberPurchase(value);
+    await showGift(value);
   }
 }
 async function confirmPayment(capture: boolean) {
@@ -160,6 +184,7 @@ async function onCancel() {
   }
 }
 function resetPurchase(product = selected.value) {
+  giftViewRevision++;
   order.value = undefined;
   celebration.value = undefined;
   attempt = undefined;
@@ -174,6 +199,11 @@ function resetPurchase(product = selected.value) {
   history.replaceState(null, "", "/");
   void renderPayPalButton();
 }
+function returnToStore() {
+  // Viewing an earlier gift must preserve recovery of a different unfinished purchase.
+  if (attempt && attempt.orderId !== celebration.value?.id) window.location.assign('/');
+  else resetPurchase();
+}
 function selectProduct(product: Product) {
   if (busy.value || paymentUncertain.value || (order.value && !terminal.value))
     return;
@@ -184,18 +214,23 @@ function selectProduct(product: Product) {
 }
 async function ensureOrder(): Promise<Order> {
   if (!selected.value) throw new ApiError('INVALID_PRODUCT', '');
-  if (order.value && !terminal.value) return order.value;
-  if (terminal.value) {
+  if (order.value && order.value.status !== 'COMPLETED' && !terminal.value) return order.value;
+  if (terminal.value || order.value?.status === 'COMPLETED') {
     order.value = undefined;
     attempt = undefined;
   }
   if (!attempt)
     attempt = { requestId: crypto.randomUUID(), productId: selected.value.id };
+  const currentAttempt = attempt;
   persist();
   const created = await api<Order>("/orders", {
-    productId: attempt.productId,
-    requestId: attempt.requestId,
+    productId: currentAttempt.productId,
+    requestId: currentAttempt.requestId,
   });
+  if (attempt !== currentAttempt) throw new ApiError('ORDER_PROCESSED', '');
+  // Bind the recovery key only to the response of its own create request.
+  currentAttempt.orderId = created.id;
+  persist();
   await acceptOrder(created);
   return created;
 }
@@ -258,7 +293,7 @@ async function initializePayPal() {
         busy.value = false;
       },
     }, locale.value);
-    if (session.hasReturned()) await session.resume();
+    if (!celebration.value && session.hasReturned()) await session.resume();
     await renderPayPalButton();
   } catch (error) {
     sdkError.value = errorText(error);
@@ -271,9 +306,9 @@ async function loadStore() {
   message.value = "";
   try {
     store.value = await api<Store>("/store");
+    await loadPurchases();
     try {
-      const last = sessionStorage.getItem('delight-last-gift-order') ?? '';
-      if (/^[a-f0-9-]{36}$/.test(last)) lastGiftOrder.value = last;
+      sessionStorage.removeItem('delight-last-gift-order');
       const saved = JSON.parse(
         sessionStorage.getItem("delight-checkout") ?? "null",
       );
@@ -290,8 +325,8 @@ async function loadStore() {
       store.value.products.find(
         (product) => product.id === attempt?.productId,
       ) ?? store.value.products[0];
-    const id =
-      new URLSearchParams(location.search).get("order") ?? attempt?.orderId;
+    const requestedId = new URLSearchParams(location.search).get('order');
+    const id = requestedId ?? attempt?.orderId;
     if (id) {
       try {
         const saved = await api<Order>(`/orders/${encodeURIComponent(id)}`);
@@ -299,9 +334,14 @@ async function loadStore() {
           store.value.products.find(
             (product) => product.id === saved.product.id,
           ) ?? selected.value;
-        await acceptOrder(saved);
-        if (saved.captureAttempted && saved.status !== "COMPLETED")
-          await confirmPayment(false);
+        if (saved.status === 'COMPLETED') {
+          // Completed purchases belong to history, never to a reusable checkout attempt.
+          if (attempt?.orderId === saved.id) { attempt = undefined; persist(); }
+          if (requestedId) await showGift(saved);
+        } else {
+          await acceptOrder(saved);
+          if (saved.captureAttempted) await confirmPayment(false);
+        }
       } catch (error) {
         message.value = errorText(error);
         if (
@@ -310,12 +350,7 @@ async function loadStore() {
             error.code,
           )
         ) {
-          attempt = undefined;
-          try {
-            sessionStorage.removeItem("delight-checkout");
-          } catch {
-            /* Optional. */
-          }
+          if (attempt?.orderId === id) { attempt = undefined; persist(); }
         }
       }
     }
@@ -373,7 +408,7 @@ onMounted(() => { if (!legalPage) void loadStore(); });
             <p>{{ t('celebrate.one') }}</p>
           </div>
         </div>
-        <GiftFlow :key="celebration.id" :order="celebration" :product-name="productName(celebration.product)" :is-demo="store?.gifts.isDemo ?? true" @update="celebration = $event" />
+        <GiftFlow :key="celebration.id" :order="celebration" :product-name="productName(celebration.product)" :is-demo="store?.gifts.isDemo ?? true" @update="updateGift" />
         <details class="receipt">
           <summary>{{ t('celebrate.receipt') }}</summary>
           <dl>
@@ -387,12 +422,26 @@ onMounted(() => { if (!legalPage) void loadStore(); });
             <dd>{{ formatMoney(celebration.amountMinor) }} EUR</dd>
           </dl>
         </details>
-        <button class="text-button" @click="resetPurchase()">
+        <button class="text-button" @click="returnToStore">
           {{ t('common.back') }} <span aria-hidden="true">↗</span>
         </button>
       </section>
       <template v-else>
         <a v-if="lastGiftOrder" :href="`/?order=${lastGiftOrder}`" class="return-gift">{{ t('gift.return') }} ↗</a>
+        <details v-if="purchases.length || purchasesError" class="purchase-history" data-testid="purchase-history">
+          <summary>{{ t('gift.history') }} <span v-if="purchases.length">({{ purchases.length }})</span></summary>
+          <p class="muted">{{ t('gift.historyHint') }}</p>
+          <p v-if="purchasesError" role="alert">{{ t(purchasesError) }} <button class="text-button" @click="loadPurchases">{{ t('store.retry') }}</button></p>
+          <ul>
+            <li v-for="purchase in purchases" :key="purchase.id">
+              <a :href="`/?order=${purchase.id}`" :data-testid="`purchase-${purchase.id}`">
+                <strong>{{ productName(purchase.product) }}</strong>
+                <span>{{ purchase.gift?.status === 'COMPLETED' ? t('gift.historyReady') : purchase.gift?.status === 'GENERATING' ? t('gift.generating') : t('gift.historyAvailable') }}</span>
+                <small>{{ t('celebrate.order') }} {{ purchase.id.slice(0, 8) }} · {{ formatMoney(purchase.amountMinor, purchase.currency) }}<template v-if="purchase.gift?.result"> · {{ t(purchase.gift.result.type === 'caricature' ? 'gift.caricature' : purchase.gift.result.type === 'greeting-card' ? 'gift.greeting' : 'gift.comic') }}</template></small>
+              </a>
+            </li>
+          </ul>
+        </details>
         <section class="hero">
           <div>
             <p class="eyebrow">{{ t('hero.eyebrow') }}</p>

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1100" viewBox="0 0 900 1100">
+  <rect width="900" height="1100" fill="#f6eee0"/>
+  <rect x="32" y="32" width="836" height="1036" rx="32" fill="#fffcf4" stroke="#d7cbb3" stroke-width="2"/>
+  <rect x="52" y="52" width="796" height="996" rx="22" fill="none" stroke="#d7cbb3" stroke-dasharray="3 9"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" fill="#284e40">
+    <text x="450" y="136" font-size="18" letter-spacing="5">PAYPAL DELIGHT AI</text>
+    <text x="450" y="260" font-family="Georgia, serif" font-size="96">For you.</text>
+    <text x="450" y="324" font-family="Georgia, serif" font-style="italic" font-size="48" fill="#b45f43">Für dich.</text>
+    <text x="450" y="396" font-size="20" letter-spacing="2">A LITTLE REASON TO CELEBRATE</text>
+    <text x="450" y="429" font-size="18">Ein kleiner Grund zum Feiern.</text>
+  </g>
+  <ellipse cx="450" cy="855" rx="247" ry="28" fill="#e9dfc9"/>
+  <!-- A mug and a present, drawn for this static demo. -->
+  <g stroke="#284e40" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M559 618h61c86 0 83 125 8 126h-47" fill="none" stroke-width="22"/>
+    <path d="M374 590h218v189c0 87-218 87-218 0Z" fill="#e9b34e"/>
+    <ellipse cx="483" cy="590" rx="109" ry="25" fill="#fff7db"/>
+    <ellipse cx="483" cy="589" rx="85" ry="13" fill="#9c6445" stroke="none"/>
+    <path d="M455 548c-30-26 25-36 5-65M505 544c-30-26 25-36 5-65" fill="none" stroke="#c7b28f" stroke-width="5"/>
+    <path d="M432 683q10-14 20 0m59 0q10-14 20 0m-65 37q18 19 37 0" fill="none"/>
+    <circle cx="426" cy="710" r="12" fill="#e79973" stroke="none"/><circle cx="539" cy="710" r="12" fill="#e79973" stroke="none"/>
+    <rect x="216" y="711" width="191" height="139" rx="8" fill="#e79973"/>
+    <rect x="204" y="686" width="215" height="38" rx="7" fill="#f5b494"/>
+    <path d="M301 687v163" stroke="#fff8e5" stroke-width="28"/>
+    <path d="M301 687c-106-4-61-93-19-31l19 31c106-4 61-93 19-31Z" fill="#fff8e5"/>
+  </g>
+  <!-- Floral corners and paper confetti. -->
+  <g stroke="#477258" stroke-width="5" fill="#8ea582">
+    <path d="M140 849c-29-82 31-124 11-195M744 845c31-98-18-124 10-199" fill="none"/>
+    <path d="M141 795c-52-8-52-46-52-46 48 1 54 26 52 46Zm12-57c42-12 43-51 43-51-45 8-47 33-43 51ZM749 781c48-4 61-41 61-41-48-8-59 20-61 41Zm0-57c-48-12-49-48-49-48 41 3 50 22 49 48Z"/>
+  </g>
+  <g fill="#e79973">
+    <circle cx="149" cy="634" r="18"/><circle cx="127" cy="654" r="18"/><circle cx="151" cy="673" r="18"/><circle cx="171" cy="652" r="18"/>
+    <circle cx="758" cy="625" r="18"/><circle cx="736" cy="644" r="18"/><circle cx="759" cy="664" r="18"/><circle cx="780" cy="643" r="18"/>
+  </g>
+  <g fill="#efb544"><circle cx="150" cy="652" r="12"/><circle cx="758" cy="645" r="12"/><path d="m201 470 9 24 24 9-24 9-9 24-9-24-24-9 24-9Zm504 21 8 22 22 8-22 8-8 22-8-22-22-8 22-8Z"/></g>
+  <g stroke-width="5" stroke-linecap="round" fill="none"><path d="m240 570 10 13m430 32 12-14M179 352l10-15m538 41 12 9" stroke="#e79973"/><path d="m318 499-6 15m329-62 4 17M209 219l8 9m484-5 10-10" stroke="#7d9b7a"/></g>
+  <g font-family="Arial, sans-serif" text-anchor="middle">
+    <text x="450" y="931" fill="#284e40" font-size="18">Small things. Happy moments. / Kleine Dinge. Große Freude.</text>
+    <rect x="351" y="965" width="198" height="40" rx="20" fill="#284e40"/>
+    <text x="450" y="991" fill="#fffcf4" font-size="17" font-weight="bold" letter-spacing="3">DEMO</text>
+  </g>
+</svg>

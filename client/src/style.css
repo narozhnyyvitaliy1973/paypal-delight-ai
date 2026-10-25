@@ -818,6 +818,10 @@ footer > span:last-child > span {
 .gift-form, .gift-result { max-width: 760px; margin: 30px auto; }
 .gift-form { padding: clamp(18px, 4vw, 36px); border: 1px solid #b5c3b3; border-radius: 16px; background: #fffdf7; text-align: left; }
 .gift-form h2 { font-size: clamp(24px, 4vw, 34px); margin-top: 0; }
+.gift-mode-label { font-weight: 600; }
+.demo-badge { display: inline-block; margin-left: 12px; padding: 4px 9px; border-radius: 4px; background: #e8eee0; color: #284e40; font: 700 11px/1.4 Arial, sans-serif; letter-spacing: 1px; vertical-align: middle; }
+.gift-choice-note { max-width: 680px; margin: 24px auto; line-height: 1.6; }
+.gift-fields > .text-button { justify-self: center; }
 .gift-fields { display: grid; gap: 18px; border: 0; padding: 0; margin: 0; min-width: 0; }
 .gift-fields label { display: grid; gap: 8px; font-weight: 600; }
 .gift-fields input:not([type=checkbox]), .gift-fields textarea { max-width: 100%; width: 100%; min-width: 0; font: inherit; color: inherit; background: #fff; border: 1px solid #b5c3b3; border-radius: 6px; padding: 12px; }
@@ -831,6 +835,12 @@ footer > span:last-child > span {
 .gift-progress { margin: 24px auto; padding: 24px; background: #f0f5e9; border-radius: 14px; }
 .gift-spinner { display: block; margin: 0 auto 12px; width: 48px; font-size: 40px; color: #55764b; animation: gift-turn 3s linear infinite; }
 .return-gift { display: inline-block; margin-top: 20px; }
+.purchase-history { margin: 18px 0; padding: 18px; border: 1px solid #dce1d4; border-radius: 12px; background: #fffdf7; }
+.purchase-history summary { cursor: pointer; font-weight: 600; }
+.purchase-history ul { display: grid; gap: 12px; list-style: none; padding: 0; }
+.purchase-history a { display: grid; gap: 6px; padding: 14px; color: inherit; border-radius: 8px; background: #f0f5e9; text-decoration: none; }
+.purchase-history a:hover { background: #e4edda; }
+.purchase-history small { color: #617161; overflow-wrap: anywhere; }
 @keyframes gift-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .gift-spinner { animation: none; } }
 @media (max-width: 640px) {

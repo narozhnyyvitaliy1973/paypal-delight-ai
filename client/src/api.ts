@@ -1,3 +1,4 @@
+export type GiftType = 'caricature' | 'greeting-card' | 'mini-comic';
 export interface Product {
   id: string;
   name: string;
@@ -36,7 +37,7 @@ export interface Order {
   captureId: string | null;
   captureAttempted: boolean;
   gift: { id: string; status: 'AVAILABLE' | 'GENERATING' | 'COMPLETED'; result: null | {
-    type: 'caricature'; language: 'en' | 'de'; provider: 'mock' | 'openai'; isDemo: boolean;
+    type: GiftType; language: 'en' | 'de'; provider: 'mock' | 'openai'; isDemo: boolean;
     text: string; width: number; height: number; createdAt: number; imageUrl: string; downloadUrl: string;
   } } | null;
 }

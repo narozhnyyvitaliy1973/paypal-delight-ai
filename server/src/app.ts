@@ -190,6 +190,7 @@ export function buildApp(
           request.body.requestId,
         ),
     );
+    app.get('/api/orders', async request => store.purchases(owner(request)));
     app.get<{ Params: { id: string } }>(
       "/api/orders/:id",
       { schema: { params } },
@@ -226,8 +227,11 @@ export function buildApp(
       schema: { params, body: {
         type: 'object', additionalProperties: false, required: ['type', 'language', 'wishes'],
         properties: {
-          type: { const: 'caricature' }, language: { type: 'string', enum: ['en', 'de'] },
+          type: { type: 'string', enum: ['caricature', 'greeting-card', 'mini-comic'] }, language: { type: 'string', enum: ['en', 'de'] },
           wishes: { type: 'string', maxLength: 500 },
+          recipientName: { type: 'string', minLength: 1, maxLength: 80 },
+          occasion: { type: 'string', minLength: 1, maxLength: 120 },
+          characterName: { type: 'string', minLength: 1, maxLength: 80 },
           photo: { type: 'object', additionalProperties: false, required: ['data', 'contentType', 'consent'], properties: {
             data: { type: 'string', minLength: 1, maxLength: 6990508 },
             contentType: { type: 'string', enum: ['image/jpeg', 'image/png', 'image/webp'] }, consent: { type: 'boolean' },
@@ -241,8 +245,8 @@ export function buildApp(
     });
     for (const action of ['image', 'download'] as const) {
       app.get<{ Params: { id: string } }>(`/api/orders/:id/gift/${action}`, { schema: { params } }, async (request, reply) => {
-        const bytes = gifts.image(owner(request), request.params.id);
-        return reply.type('image/png').header('Content-Disposition', `${action === 'download' ? 'attachment' : 'inline'}; filename="delight-caricature-${request.params.id}.png"`).send(bytes);
+        const image = gifts.image(owner(request), request.params.id);
+        return reply.type('image/png').header('Content-Disposition', `${action === 'download' ? 'attachment' : 'inline'}; filename="delight-${image.type}-${request.params.id}.png"`).send(image.bytes);
       });
     }
   });

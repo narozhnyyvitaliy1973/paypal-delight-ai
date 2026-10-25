@@ -2,10 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { OrderStore } from '../database.js';
 import { AppError } from '../errors.js';
 import { withPreparedPhoto, PHOTO_MAX_BYTES } from './photo.js';
-import type { GiftProvider, GiftLanguage, GiftResult } from './provider.js';
+import { validateGiftParameters, type GiftProvider, type GiftParameters, type GiftResult } from './provider.js';
 
-export interface CreateGift {
-  type: 'caricature'; language: GiftLanguage; wishes: string;
+export interface CreateGift extends GiftParameters {
   photo?: { data: string; contentType: string; consent: boolean };
 }
 export const GIFT_LEASE_MS = 120_000;
@@ -23,6 +22,7 @@ export class Gifts {
     const order = this.read(owner, id);
     // Idempotent even if the original HTTP response was lost.
     if (order.gift!.status !== 'AVAILABLE') return order;
+    validateGiftParameters(input);
     const token = randomUUID();
     const claimed = this.store.db.prepare("UPDATE gift_entitlements SET status = 'RESERVED', lock_token = ?, lock_until = ? WHERE order_id = ? AND status = 'AVAILABLE'")
       .run(token, Date.now() + GIFT_LEASE_MS, id);
@@ -38,11 +38,13 @@ export class Gifts {
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           return await Promise.race([
-            this.provider.generate({ type: input.type, product: order.product, language: input.language, wishes: input.wishes, photo }),
+            this.provider.generate({ type: input.type, product: order.product, language: input.language, wishes: input.wishes.trim(),
+              recipientName: input.recipientName?.trim(), occasion: input.occasion?.trim(), characterName: input.characterName?.trim(), photo }),
             new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Gift timeout')), 60_000); }),
           ]);
         } finally { clearTimeout(timer); }
       });
+      if (result.type !== input.type || result.language !== input.language) throw new Error('Provider returned a mismatched gift');
       this.save(id, token, result);
       return this.read(owner, id);
     } catch (error) {
@@ -59,8 +61,8 @@ export class Gifts {
     this.store.db.transaction(() => {
       // Shared by content hash, survives release replacement and never duplicates the mock PNG.
       this.store.db.prepare('INSERT INTO gift_images (hash, bytes) VALUES (?, ?) ON CONFLICT(hash) DO NOTHING').run(hash, result.image.bytes);
-      const saved = this.store.db.prepare("UPDATE gift_entitlements SET status = 'GENERATED', mode = 'caricature', result_hash = ?, result_json = ?, lock_token = NULL, lock_until = 0 WHERE order_id = ? AND status = 'RESERVED' AND lock_token = ? AND lock_until > ?")
-        .run(hash, metadata, id, token, Date.now());
+      const saved = this.store.db.prepare("UPDATE gift_entitlements SET status = 'GENERATED', mode = ?, result_hash = ?, result_json = ?, lock_token = NULL, lock_until = 0 WHERE order_id = ? AND status = 'RESERVED' AND lock_token = ? AND lock_until > ?")
+        .run(result.type, hash, metadata, id, token, Date.now());
       if (!saved.changes) throw new AppError(409, 'GIFT_RETRY', 'The operation expired. Check your gift and try again.');
     }).immediate();
   }
@@ -70,6 +72,6 @@ export class Gifts {
     if (order.gift!.status !== 'COMPLETED') throw new AppError(409, 'GIFT_NOT_READY', 'Your gift is not ready yet.');
     const image = this.store.db.prepare('SELECT i.bytes FROM gift_images i JOIN gift_entitlements g ON g.result_hash = i.hash WHERE g.order_id = ?').get(id) as { bytes: Buffer } | undefined;
     if (!image) throw new AppError(404, 'GIFT_NOT_READY', 'Your gift is not ready yet.');
-    return image.bytes;
+    return { bytes: image.bytes, type: order.gift!.result!.type };
   }
 }

@@ -28,7 +28,7 @@ test('mock is the default, requires no credentials, returns the real local PNG a
     assert.equal(german.language, 'de'); assert.match(german.text, /Demobild/);
     assert.deepEqual(german.image.bytes, result.image.bytes);
     assert.throws(() => createGiftProvider('openai'), /not implemented/);
-    await assert.rejects(provider.generate({ ...request, type: 'mini-comic' }), { code: 'GIFT_TYPE_UNAVAILABLE' });
+    await assert.rejects(provider.generate({ ...request, type: 'unknown' }), { code: 'GIFT_TYPE_UNAVAILABLE' });
     await assert.rejects(provider.generate({ ...request, wishes: 'x'.repeat(501) }), { code: 'INVALID_REQUEST' });
   } finally { globalThis.fetch = originalFetch; }
 });
