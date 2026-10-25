@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { fixture } from './helpers.mjs';
 import { MockGiftProvider } from '../dist/gifts/provider.js';
+import { assertBrandedPng, saveLegacyGift } from './image-assertions.mjs';
 
 const body = { type: 'caricature', language: 'en', wishes: 'A sunny morning' };
 const inputs = {
@@ -53,13 +54,61 @@ test('purchase → gift without photo → protected download; repeated creation/
       assert.equal(image.headers['content-type'], 'image/png');
       assert.match(image.headers['content-disposition'], new RegExp(`^${action === 'download' ? 'attachment' : 'inline'}; filename="delight-caricature-${order.id}.png"$`));
       assert.equal(image.headers['cache-control'], 'no-store');
-      assert.deepEqual(image.rawPayload, await readFile(new URL('../dist/assets/mock-caricature.png', import.meta.url)));
+      await assertBrandedPng(image.rawPayload, await readFile(new URL('../dist/assets/mock-caricature.png', import.meta.url)), 'en');
     }
     assert.deepEqual((await f.send(`/orders/${order.id}/capture`)).json().gift, gift);
     assert.equal(f.sandbox.captureKeys.length, 1);
     assert.equal(count(f, 'gift_entitlements'), 1);
     assert.equal(count(f, 'gift_images'), 1);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('branding failure preserves the gift right and retry saves one branded PNG', async t => {
+  let calls = 0;
+  const mock = new MockGiftProvider();
+  const f = await fixture(t, { giftProvider: { name: 'mock', generate: async input => {
+    const result = await mock.generate(input);
+    if (++calls === 1) result.image.bytes = Buffer.from('invalid provider PNG');
+    return result;
+  } } });
+  const order = await paid(f);
+  const failed = await create(f, order);
+  assert.equal(failed.statusCode, 503); assert.equal(failed.json().code, 'GIFT_FAILED');
+  assert.equal(f.store.gift(order.id).status, 'AVAILABLE'); assert.equal(count(f, 'gift_images'), 0);
+  assert.equal((await create(f, order)).json().gift.status, 'COMPLETED');
+  assert.equal(count(f, 'gift_images'), 1); assert.equal(calls, 2);
+});
+
+test('unbranded stage-3C gifts survive restart and mixed old/new gifts are never reprocessed', async t => {
+  const path = await temporary(t);
+  const first = await fixture(t, { path });
+  const mock = new MockGiftProvider();
+  const legacy = [];
+  for (const input of Object.values(inputs)) {
+    const order = await paid(first);
+    const result = await mock.generate({ ...input, product: order.product });
+    saveLegacyGift(first.store, order.id, result);
+    legacy.push({ order, result, gift: first.store.gift(order.id) });
+  }
+  const rows = first.store.db.prepare('SELECT * FROM gift_entitlements ORDER BY id').all();
+  await first.app.close();
+  const next = await fixture(t, { path, cookie: first.cookie, sandbox: first.sandbox });
+  cleanup(t, path);
+  assert.deepEqual(next.store.db.prepare('SELECT * FROM gift_entitlements ORDER BY id').all(), rows);
+  for (const { order, result, gift } of legacy) {
+    assert.deepEqual((await next.get(`/orders/${order.id}/gift`)).json().gift, gift);
+    assert.deepEqual((await create(next, order, { ...inputs['mini-comic'], language: 'de' })).json().gift, gift);
+    for (const action of ['image', 'download']) {
+      const response = await next.get(`/orders/${order.id}/gift/${action}`);
+      assert.equal(response.statusCode, 200); assert.deepEqual(response.rawPayload, result.image.bytes);
+    }
+    const fresh = await paid(next);
+    assert.equal((await create(next, fresh, inputs[result.type])).json().gift.status, 'COMPLETED');
+    const response = await next.get(`/orders/${fresh.id}/gift/download`);
+    await assertBrandedPng(response.rawPayload, result.image.bytes, 'en');
+  }
+  assert.equal(next.store.db.pragma('user_version', { simple: true }), 2);
+  assert.equal(count(next, 'gift_images'), 6); assert.equal(count(next, 'gift_entitlements'), 6);
 });
 
 test('photo consent, EXIF removal and provider inputs; photos/wishes never enter persistent results', async t => {
@@ -190,7 +239,7 @@ test('v2 restart preserves payments and all three saved modes, with one PNG per 
     for (const input of Object.values(inputs)) assert.deepEqual((await create(next, saved, input)).json(), saved);
     const download = await next.get(`/orders/${saved.id}/gift/download`);
     assert.equal(download.statusCode, 200);
-    assert.deepEqual(download.rawPayload, await readFile(new URL(`../dist/assets/mock-${saved.gift.result.type}.png`, import.meta.url)));
+    await assertBrandedPng(download.rawPayload, await readFile(new URL(`../dist/assets/mock-${saved.gift.result.type}.png`, import.meta.url)), saved.gift.result.language);
   }
   assert.equal(count(next, 'gift_images'), 3);
 });
@@ -290,12 +339,14 @@ for (const type of Object.keys(inputs)) {
       for (const [key, value] of Object.entries(input)) assert.equal(observed[key], value);
       assert.equal(observed.photo, undefined);
       const metadata = await sharp(asset).metadata();
-      assert.equal(gift.result.width, metadata.width); assert.equal(gift.result.height, metadata.height);
+      assert.equal(gift.result.width, metadata.width); assert.ok(gift.result.height > metadata.height);
       assert.equal(metadata.format, 'png'); assert.equal(metadata.exif, undefined);
       for (const suffix of ['image', 'download']) {
         const image = await f.get(`/orders/${order.id}/gift/${suffix}`);
         assert.equal(image.statusCode, 200); assert.equal(image.headers['content-type'], 'image/png');
-        assert.deepEqual(image.rawPayload, asset);
+        const branded = await assertBrandedPng(image.rawPayload, asset, language);
+        assert.equal(branded.width, gift.result.width); assert.equal(branded.height, gift.result.height);
+        assert.deepEqual(image.rawPayload, (await f.get(`/orders/${order.id}/gift/image`)).rawPayload);
         assert.ok(image.headers['content-disposition'].includes(`delight-${type}-${order.id}.png`));
         const stranger = (await f.app.inject('/api/store')).headers['set-cookie'].split(';')[0];
         assert.equal((await f.get(`/orders/${order.id}/gift/${suffix}`, { headers: { cookie: stranger } })).statusCode, 404);
@@ -308,7 +359,7 @@ for (const type of Object.keys(inputs)) {
       assert.deepEqual(f.store.get(order.id), payment);
       assert.deepEqual((await f.send(`/orders/${order.id}/capture`)).json().gift, gift);
     }
-    assert.equal(calls, 2); assert.equal(count(f, 'gift_images'), 1);
+    assert.equal(calls, 2); assert.equal(count(f, 'gift_images'), 2); // EN and DE have different embedded captions.
     assert.equal(count(f, 'gift_entitlements'), 2); assert.equal(f.sandbox.captureKeys.length, 2);
   });
 }
@@ -409,7 +460,7 @@ test('one session buys three times: separate rights, parallel replays, private h
     assert.deepEqual((await create(next, order, inputs['mini-comic'])).json().gift, gift);
     const download = await next.get(`/orders/${order.id}/gift/download`);
     assert.equal(download.statusCode, 200);
-    assert.deepEqual(download.rawPayload, await readFile(new URL(`../dist/assets/mock-${gift.result.type}.png`, import.meta.url)));
+    await assertBrandedPng(download.rawPayload, await readFile(new URL(`../dist/assets/mock-${gift.result.type}.png`, import.meta.url)), gift.result.language);
   }
   assert.equal(next.store.gift(available.id).status, 'AVAILABLE');
   assert.equal(count(next, 'gift_entitlements'), 4); assert.equal(count(next, 'gift_images'), 3);

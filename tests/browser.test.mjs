@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { preview, createServer } from "vite";
 import { fixture } from "../server/test/helpers.mjs";
+import { assertBrandedPng, saveLegacyGift } from '../server/test/image-assertions.mjs';
 
 // Browser and SDK interactions are simulated; real PayPal approval is a separate owner acceptance test.
 const mockSdk = `
@@ -413,7 +414,10 @@ test(
       await f.page.getByTestId('gift-download').click();
       const download = await downloaded;
       assert.match(download.suggestedFilename(), /^delight-caricature-[a-f0-9-]+\.png$/);
-      assert.deepEqual(await readFile(await download.path()), await readFile(new URL('../server/dist/assets/mock-caricature.png', import.meta.url)));
+      const downloadedPng = await readFile(await download.path());
+      await assertBrandedPng(downloadedPng, await readFile(new URL('../server/dist/assets/mock-caricature.png', import.meta.url)), 'en');
+      const preview = await f.context.request.get(new URL(await f.page.locator('.gift-image').getAttribute('src'), f.origin).href);
+      assert.deepEqual(await preview.body(), downloadedPng);
       await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
       await f.page.getByRole('button', { name: 'Back to the store' }).click();
       await f.page.getByRole('link', { name: 'Return to your latest gift' }).click();
@@ -462,6 +466,14 @@ test(
       await f.page.getByRole('heading', { name: 'Your gift is ready!' }).waitFor();
       await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
       assert.match(await f.page.locator('.gift-result').innerText(), /same prepared illustration/);
+      // Changing the UI language never rewrites a saved German gift.
+      const pendingDownload = f.page.waitForEvent('download');
+      await f.page.getByTestId('gift-download').click();
+      const download = await pendingDownload;
+      const downloadedPng = await readFile(await download.path());
+      await assertBrandedPng(downloadedPng, await readFile(new URL('../server/dist/assets/mock-caricature.png', import.meta.url)), 'de');
+      const preview = await f.context.request.get(new URL(await f.page.locator('.gift-image').getAttribute('src'), f.origin).href);
+      assert.deepEqual(await preview.body(), downloadedPng);
       assert.ok(outgoing.every(url => new URL(url).hostname === 'www.sandbox.paypal.com'));
       assert.deepEqual(f.errors, []);
     });
@@ -574,7 +586,10 @@ test(
           await f.page.getByTestId('gift-download').click();
           const download = await pendingDownload;
           assert.match(download.suggestedFilename(), new RegExp(`^delight-${mode}-[a-f0-9-]+\\.png$`));
-          assert.deepEqual(await readFile(await download.path()), await readFile(new URL(`../server/dist/assets/mock-${mode}.png`, import.meta.url)));
+          const downloadedPng = await readFile(await download.path());
+          await assertBrandedPng(downloadedPng, await readFile(new URL(`../server/dist/assets/mock-${mode}.png`, import.meta.url)), language);
+          const preview = await f.context.request.get(new URL(await f.page.locator('.gift-image').getAttribute('src'), f.origin).href);
+          assert.deepEqual(await preview.body(), downloadedPng);
           await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
           assert.equal(await f.page.getByTestId('language-switch').inputValue(), language);
           assert.equal(await f.page.locator('.gift-options').count(), 0);
@@ -598,6 +613,31 @@ test(
         });
       }
     }
+
+    await t.test('stage-3C unbranded gifts still preview and download unchanged after reload', async t => {
+      const f = await pageFixture(t);
+      const mock = new MockGiftProvider();
+      for (const type of ['caricature', 'greeting-card', 'mini-comic']) {
+        await pay(f.page); await success(f.page).waitFor();
+        const id = new URL(f.page.url()).searchParams.get('order');
+        const input = { type, language:'en', wishes:'', recipientName: type === 'greeting-card' ? 'Demo' : undefined,
+          occasion: type === 'greeting-card' ? 'Demo' : undefined, characterName: type === 'mini-comic' ? 'Demo' : undefined,
+          product: { id:'daybreak-mug', name:'Daybreak Mug' } };
+        const original = await mock.generate(input);
+        saveLegacyGift(f.store, id, original);
+        await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
+        await f.page.locator('.gift-image').evaluate(image=>image.decode());
+        assert.equal(await f.page.locator('.gift-image').evaluate(image=>image.naturalHeight), original.image.height);
+        const preview = await f.context.request.get(new URL(await f.page.locator('.gift-image').getAttribute('src'), f.origin).href);
+        assert.deepEqual(await preview.body(), original.image.bytes);
+        const pendingDownload = f.page.waitForEvent('download');
+        await f.page.getByTestId('gift-download').click();
+        assert.deepEqual(await readFile(await (await pendingDownload).path()), original.image.bytes);
+        await f.page.getByRole('button', {name:/Back to the store/}).click();
+        await f.page.getByRole('button', { name:'PayPal', exact:true }).waitFor();
+      }
+      assert.deepEqual(f.errors, []);
+    });
 
     await t.test('switching modes discards photo and names; failed comic can be retried as a card', async t => {
       let calls = 0, observed;

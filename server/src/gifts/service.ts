@@ -3,6 +3,7 @@ import { OrderStore } from '../database.js';
 import { AppError } from '../errors.js';
 import { withPreparedPhoto, PHOTO_MAX_BYTES } from './photo.js';
 import { validateGiftParameters, type GiftProvider, type GiftParameters, type GiftResult } from './provider.js';
+import { brandGiftImage } from './branding.js';
 
 export interface CreateGift extends GiftParameters {
   photo?: { data: string; contentType: string; consent: boolean };
@@ -45,7 +46,7 @@ export class Gifts {
         } finally { clearTimeout(timer); }
       });
       if (result.type !== input.type || result.language !== input.language) throw new Error('Provider returned a mismatched gift');
-      this.save(id, token, result);
+      this.save(id, token, await brandGiftImage(result));
       return this.read(owner, id);
     } catch (error) {
       this.store.db.prepare("UPDATE gift_entitlements SET status = 'AVAILABLE', lock_token = NULL, lock_until = 0 WHERE order_id = ? AND status = 'RESERVED' AND lock_token = ?").run(id, token);
