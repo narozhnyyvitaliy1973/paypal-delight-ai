@@ -158,5 +158,10 @@ PAYPAL_DELIGHT_INFRA_HANDOFF*.md
 data/
 *.sqlite
 *.sqlite-*
+*.sqlite3
+*.sqlite3-*
 *.db
 *.db-*
+
+# Private test-site login details, regardless of their local directory
+access.txt
