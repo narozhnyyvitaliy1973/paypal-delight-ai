@@ -46,7 +46,7 @@ const mockSdk = `
 
 test(
   "browser checkout scenarios with simulated PayPal v6 and real application HTTP/SQLite",
-  { timeout: 180_000 },
+  { timeout: 240_000 },
   async (t) => {
     const executablePath =
       process.env.BROWSER_EXECUTABLE_PATH ??
@@ -125,7 +125,7 @@ test(
     const pay = (page) =>
       page.getByRole("button", { name: "PayPal", exact: true }).click();
     const success = (page) =>
-      page.getByRole("heading", { name: "Celebrate Your Purchase!" });
+      page.getByRole("heading", { name: "Payment successful!" });
 
     await t.test(
       "desktop/mobile store, approved purchase and reload restore the verified gift",
@@ -306,7 +306,7 @@ test(
       await f.page.screenshot({ path: `${screenshots}/store-de-mobile.png`, fullPage: true });
       await f.page.setViewportSize({ width: 1360, height: 1000 });
       await pay(f.page);
-      await f.page.getByRole('heading', { name: 'Feiere deinen Einkauf!' }).waitFor();
+      await f.page.getByRole('heading', { name: 'Zahlung erfolgreich!' }).waitFor();
       assert.match(await f.page.locator('.celebration-copy').textContent(), /Morgensonne-Tasse/);
       assert.equal(await f.page.locator('.gift-options button:disabled').count(), 0);
       await f.page.getByText('Dein persönliches KI-Geschenk ist verfügbar.', { exact: true }).waitFor();
@@ -325,7 +325,7 @@ test(
       await f.page.getByRole('heading', { name: 'Morgensonne-Tasse' }).waitFor();
       // The store stays open for a new purchase; earlier paid orders have explicit links.
       await f.page.getByRole('link', { name: 'Zurück zu deinem letzten Geschenk' }).click();
-      await f.page.getByRole('heading', { name: 'Feiere deinen Einkauf!' }).waitFor();
+      await f.page.getByRole('heading', { name: 'Zahlung erfolgreich!' }).waitFor();
       assert.equal(f.sandbox.orders.size, 1);
       assert.equal(f.sandbox.captureKeys.length, 1);
       assert.deepEqual(f.errors, []);
@@ -465,6 +465,7 @@ test(
       await f.page.getByTestId('language-switch').selectOption('en');
       await f.page.getByRole('heading', { name: 'Your gift is ready!' }).waitFor();
       await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
+      await f.page.locator('.result-details summary').click();
       assert.match(await f.page.locator('.gift-result').innerText(), /same prepared illustration/);
       // Changing the UI language never rewrites a saved German gift.
       const pendingDownload = f.page.waitForEvent('download');
@@ -807,6 +808,120 @@ test(
       assert.equal(f.sandbox.captureKeys.length, 2);
       assert.deepEqual(f.errors, []);
     });
+
+    for (const language of ['en', 'de']) {
+      for (const width of [375, 768, 1440]) {
+        await t.test(`redesign: ${language} at ${width}px, keyboard, motion, screenshots and purchase navigation`, async t => {
+          const f = await pageFixture(t, 'approve', { locale: language === 'de' ? 'de-DE' : 'en-US' });
+          const output = `${screenshots}/stage4-reference`;
+          mkdirSync(output, { recursive: true });
+          await f.page.setViewportSize({ width, height: width === 375 ? 844 : 1000 });
+          await f.page.emulateMedia({ reducedMotion: 'reduce' });
+          const assertLayout = async () => {
+            assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No horizontal page overflow');
+            const controls = await f.page.locator('button:visible, a:visible, select:visible, input:visible, textarea:visible').evaluateAll(nodes => nodes.filter(node => {
+              const r = node.getBoundingClientRect();
+              return r.left < -1 || r.right > innerWidth + 1;
+            }).map(node => node.tagName + ':' + node.textContent?.slice(0, 60)));
+            assert.deepEqual(controls, [], 'Interactive controls stay inside viewport');
+
+          };
+          const shot = async (name, region) => {
+            // Load lazy photography by scrolling it into view, as a visitor would.
+            for (const img of await f.page.locator('img:visible').all()) {
+              await img.scrollIntoViewIfNeeded();
+              await img.evaluate(image => image.decode());
+            }
+            await assertLayout();
+            await f.page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+            await f.page.mouse.move(0, 0);
+            await f.page.evaluate(() => window.scrollTo(0, 0));
+            await f.page.screenshot({ path: `${output}/${name}-${language}-${width}.png`, fullPage: true, animations: 'disabled' });
+            const endSelector = name === 'store' ? '#collection' : name === 'celebrate' ? '.gift-options' : region;
+            if (endSelector) {
+              const bounds = await f.page.locator(endSelector).boundingBox();
+              const height = Math.min(Math.ceil(bounds.y + bounds.height + 24), await f.page.evaluate(() => document.documentElement.scrollHeight));
+              await f.page.screenshot({ path: `${output}/${name}-overview-${language}-${width}.png`, fullPage: true, clip: { x: 0, y: 0, width, height }, animations: 'disabled' });
+            }
+            if (region) await f.page.locator(region).screenshot({ path: `${output}/${name}-detail-${language}-${width}.png`, animations: 'disabled' });
+          };
+          await f.page.getByTestId('language-switch').selectOption(language);
+          await f.page.reload();
+          await f.page.getByRole('button', { name: 'PayPal', exact: true }).waitFor();
+          assert.equal(await f.page.getByTestId('language-switch').inputValue(), language);
+          assert.equal(await f.page.locator('html').getAttribute('lang'), language);
+          await f.page.keyboard.press('Tab');
+          assert.equal(await f.page.locator('.skip-link').evaluate(el => el === document.activeElement), true);
+          await f.page.keyboard.press('Enter');
+          assert.equal(await f.page.locator('#main-content').evaluate(el => el === document.activeElement), true);
+          await shot('store');
+          assert.ok(await f.page.locator('.product-card').evaluateAll(cards => cards.every(card => {
+            const heading = card.querySelector('.product-heading').getBoundingClientRect();
+            const description = card.querySelector('.product-description').getBoundingClientRect();
+            return description.top >= heading.bottom - 1;
+          })), 'Product descriptions do not overlap names or prices, including German text');
+          const paypal = f.page.locator('paypal-button');
+          await paypal.scrollIntoViewIfNeeded();
+          assert.ok(await paypal.evaluate(el => {
+            const r = el.getBoundingClientRect();
+            return r.width >= 200 && r.height >= 44 && document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === el;
+          }), 'SDK button has its own visible, unobstructed area');
+          await f.page.locator('#checkout').screenshot({ path: `${output}/checkout-${language}-${width}.png` });
+          await pay(f.page); // Only the isolated Sandbox stub; no external payment calls.
+          await f.page.getByTestId('choose-caricature').waitFor();
+          const id = new URL(f.page.url()).searchParams.get('order');
+          assert.equal(await f.page.locator('.celebration-heading').evaluate(el => getComputedStyle(el).animationName), 'none');
+          await shot('celebrate');
+          for (const type of ['greeting-card', 'mini-comic', 'caricature']) {
+            const choose = f.page.getByTestId(`choose-${type}`);
+            await choose.focus();
+            await f.page.keyboard.press('Tab');
+            await f.page.keyboard.press('Shift+Tab');
+            assert.equal(await choose.evaluate(el => getComputedStyle(el).outlineStyle), 'solid');
+            await f.page.keyboard.press('Enter');
+            await f.page.locator('.gift-form h2').waitFor();
+            assert.equal(await f.page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(12, 20, 33)');
+            const formRect = await f.page.locator('.gift-form').boundingBox();
+            const previewRect = await f.page.locator('.studio-preview').boundingBox();
+            if (width > 640) assert.ok(previewRect.x >= formRect.x + formRect.width - 1, 'Studio settings sit to the left of the large preview');
+            else assert.ok(previewRect.y >= formRect.y + formRect.height - 1, 'Mobile studio stacks settings and preview');
+            assert.equal(await f.page.locator('.gift-form h2').evaluate(el => el === document.activeElement), true);
+            assert.ok(await f.page.locator('.gift-form h2').evaluate(el => {
+              const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight;
+            }), 'Focused step heading stays visible to keyboard users');
+            await shot(type === 'greeting-card' ? 'studio' : `studio-${type}`, '.studio');
+            if (type !== 'caricature') await f.page.getByTestId('change-gift-mode').click();
+          }
+          assert.equal(await f.page.getByRole('checkbox').isChecked(), false);
+          assert.equal(await f.page.locator('input[type=file]').isDisabled(), true);
+          await f.page.getByTestId('create-gift').click();
+          await f.page.getByTestId('gift-result').waitFor();
+          await f.page.locator('.gift-image').evaluate(image => image.decode());
+          await shot('result', '.gift-result');
+          assert.equal(await f.page.getByTestId('create-gift').count(), 0);
+          assert.equal(await f.page.getByTestId('change-gift-mode').count(), 0);
+          const artRect = await f.page.locator('.result-art').boundingBox();
+          const copyRect = await f.page.locator('.result-copy').boundingBox();
+          if (width === 375) assert.ok(artRect.y + artRect.height <= copyRect.y + 1, 'Mobile result puts the image first');
+          else assert.ok(artRect.width > copyRect.width && artRect.x > copyRect.x, 'Desktop result gives the image most of the space');
+          const downloadEvent = f.page.waitForEvent('download');
+          await f.page.getByTestId('gift-download').click();
+          const bytes = await readFile(await (await downloadEvent).path());
+          await assertBrandedPng(bytes, await readFile(new URL('../server/dist/assets/mock-caricature.png', import.meta.url)), language);
+          await f.page.reload();
+          await f.page.getByTestId('gift-result').waitFor();
+          assert.equal(f.store.gift(id).status, 'COMPLETED');
+          await f.page.locator('.main-nav a[href="/#purchases"]').click();
+          await f.page.waitForFunction(() => document.querySelector('#purchases')?.open === true);
+          await assertLayout();
+          await f.page.getByTestId(`purchase-${id}`).click();
+          await f.page.getByTestId('gift-result').waitFor();
+          assert.equal(new URL(f.page.url()).searchParams.get('order'), id);
+          assert.equal(f.sandbox.captureKeys.length, 1);
+          assert.deepEqual(f.errors, []);
+        });
+      }
+    }
 
     await t.test('prepared photo component requires consent, permits withdrawal and makes no upload', async t => {
       const dev = await createServer({

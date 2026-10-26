@@ -1,6 +1,28 @@
 import type en from './en';
 
 export default {
+  design: {
+    heroTitle: 'Mach aus deinem Einkauf etwas', heroAccent: 'Persönliches.', heroDescription: 'Entdecke Lieblingsstücke für jeden Tag. Wähle nach deiner PayPal-Zahlung ein kreatives Geschenk für deinen Glücksmoment.',
+    favourites: 'Unsere Favoriten', allProducts: 'Alle drei entdecken', afterCheckout: 'Nach bestätigter Zahlung', heroBenefitPay: 'Mit PayPal bezahlen', heroBenefitGift: 'Ein Geschenk wählen', heroBenefitSmile: 'Freude mitnehmen',
+    paymentSuccess: 'Zahlung erfolgreich!', giftSelection: 'Wähle dein KI-Geschenk', selectionDescription: 'Ein Einkauf. Drei kreative Möglichkeiten. Wähle deinen Favoriten.',
+    studioTitles: { caricature: 'Karikatur-Studio', greeting: 'Grußkarten-Studio', comic: 'Mini-Comic-Studio' },
+    studioDescriptions: { caricature: 'Ein Porträtmoment, inspiriert von deinem Einkauf.', greeting: 'Eine persönliche Botschaft für einen besonderen Menschen.', comic: 'Gib deinem Einkauf eine eigene Geschichte.' },
+    createModes: { caricature: 'Karikatur erstellen', greeting: 'Grußkarte erstellen', comic: 'Mini-Comic erstellen' },
+    studioPreview: 'GESCHENKVORSCHAU', photoDetails: 'So wird dein Foto verarbeitet', demoDetails: 'Über diese Demo', giftBranding: 'Ein kleines Extra nach dem Bezahlen mit PayPal',
+    settings: 'Dein Geschenk gestalten', oneGift: 'Ein Einkauf · Ein Geschenk', studioMock: 'Vorbereitete Demo-Illustration', returnSelection: 'Zurück zur Geschenkauswahl',
+    skip: 'Zum Inhalt springen', navigation: 'Hauptnavigation', collection: 'Die Kollektion', how: 'So funktioniert’s', purchases: 'Einkäufe & Geschenke',
+    heroTag: 'SCHÖNE FUNDSTÜCKE. KLEINE GLÜCKSMOMENTE.', heroNote: 'Ein schöner Fund ist erst der Anfang.', heroGift: 'Ein kleines Extra, freigeschaltet.', demoShort: 'Demo-Erlebnis · Vorbereitete Illustrationen',
+    categories: { mug: 'FÜR ENTSPANNTE MORGEN', tote: 'FÜR JEDES KLEINE ABENTEUER', headphones: 'FÜR DEINE EIGENE KLEINE WELT' },
+    collectionNote: 'Lieblingsstücke für jeden Tag. Mit einem kreativen Extra.', photoNote: 'Beispielhafte Produktfotografie. Dies ist ein Sandbox-Demoshop.',
+    checkoutExtra: 'Als Nächstes? Eine kleine Überraschung.', checkoutExtraText: 'Wähle nach der Zahlung eines von drei kreativen Geschenken.',
+    chooseTitle: 'Welches Extra darf es sein?', chooseIntro: 'Drei Ideen für deinen Glücksmoment. Wähle deinen Favoriten.', choose: 'Das nehme ich',
+    styles: { caricature: 'EIN BISSCHEN MEHR DU', greeting: 'EIN BISSCHEN MEHR HERZ', comic: 'EIN BISSCHEN MEHR ABENTEUER' },
+    studio: 'Geschenkstudio', studioIntro: 'Ein paar Details. Ein wenig Fantasie.', preview: 'Ein Blick auf dein Geschenk', previewNote: 'Demo-Vorschau · Dein gewählter Stil',
+    studioHint: 'Ein kleiner Moment zum Behalten.', resultIntro: 'Eine kleine Überraschung. Ein Lächeln zum Mitnehmen.', resultFormat: 'PNG-Bild · Bereit zum Herunterladen',
+    resultSaved: 'Bei diesem Einkauf sicher gespeichert', purchaseContext: 'DEIN BESTÄTIGTER EINKAUF', included: 'Ein Geschenk inklusive',
+    receiptHint: 'Zahlung & Bestelldetails', footerNote: 'Schöne Dinge. Überraschende Glücksmomente.', stepsTitle: 'Das Beste kommt nach dem Bezahlen.',
+    stepShop: '01 / ENTDECKEN', stepPay: '02 / MIT PAYPAL BEZAHLEN', stepGift: '03 / PERSÖNLICH GESTALTEN',
+  },
   common: { language: 'Sprache', sandbox: 'Nur Sandbox', back: 'Zurück zum Shop', total: 'Gesamt', demo: 'Demobild — nicht KI-generiert oder personalisiert.' },
   announcement: { title: 'Ein kleiner Einkauf. Eine persönliche Überraschung.', welcome: 'Willkommen im Sandbox-Shop.' },
   hero: { eyebrow: 'KLEINE DINGE, GANZ PERSÖNLICH', title: 'Schöne Entdeckungen.', accent: 'Noch schönere Gefühle.', description: 'Lieblingsstücke für jeden Tag. Ein überraschend persönliches Geschenk.', invitation: 'Such dir etwas Schönes aus — wir schenken dir ein kleines Extra.', explore: 'Kollektion entdecken', stampLabel: 'Ein persönliches KI-Geschenk zu jedem bestätigten Kauf', stamp: 'Ein kleines Extra,', stampAccent: 'nur für dich.', equation: '1 Einkauf = 1 KI-Geschenk' },

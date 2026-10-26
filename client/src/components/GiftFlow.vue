@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError, type Order, type GiftType } from '../api';
 import { errorKey } from '../i18n';
 import GiftPhotoInput from './GiftPhotoInput.vue';
+import AppIcon from './AppIcon.vue';
 
 const props = defineProps<{ order: Order; productName: string; isDemo: boolean }>();
 const emit = defineEmits<{ update: [order: Order] }>();
@@ -21,6 +22,13 @@ const selection = ref<{ consent: boolean; file?: File }>({ consent: false });
 const error = ref('');
 const result = computed(() => props.order.gift?.result);
 const generating = computed(() => submitting.value || props.order.gift?.status === 'GENERATING');
+const flowElement = ref<HTMLElement>();
+// Keep keyboard users at the next visible step when its triggering button disappears.
+watch([form, result], async () => {
+  await nextTick();
+  const heading = flowElement.value?.querySelector<HTMLElement>('h2');
+  heading?.focus();
+});
 let poll: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 
@@ -100,48 +108,68 @@ async function create() {
 </script>
 
 <template>
-  <div class="gift-flow">
-    <div v-if="result" class="gift-result" data-testid="gift-result">
-      <p class="eyebrow">{{ t('gift.readyEyebrow') }}</p>
-      <h2>{{ t('gift.ready') }}</h2>
-      <p class="gift-mode-label" data-testid="gift-mode">{{ t(`gift.${modeKeys[result.type]}`) }}<span v-if="result.isDemo" class="demo-badge">DEMO</span></p>
-      <p v-if="result.isDemo" class="demo-note">{{ t('gift.mockNotice') }}</p>
-      <p v-else>{{ result.text }}</p>
-      <img :src="result.imageUrl" :alt="t(result.isDemo ? `gift.${modeKeys[result.type]}Alt` : 'gift.resultAlt')" :width="result.width" :height="result.height" class="gift-image" />
-      <a class="primary-button download-button" :href="result.downloadUrl" download data-testid="gift-download">{{ t('gift.download') }} <span aria-hidden="true">↓</span></a>
-      <p class="muted">{{ t('gift.saved') }}</p>
+  <div ref="flowElement" class="gift-flow">
+    <div v-if="result" class="gift-result" :class="`mode-${result.type}`" data-testid="gift-result">
+      <div class="result-copy">
+        <p class="gift-mode-label" data-testid="gift-mode">{{ t(`gift.${modeKeys[result.type]}`) }}<span v-if="result.isDemo" class="demo-badge">DEMO</span></p>
+        <h2 tabindex="-1">{{ t('gift.ready') }}</h2>
+        <p class="result-intro">{{ t('design.resultIntro') }}</p>
+        <p v-if="!result.isDemo">{{ result.text }}</p>
+        <a class="primary-button download-button" :href="result.downloadUrl" download data-testid="gift-download">{{ t('gift.download') }}<AppIcon name="download" /></a>
+        <p class="saved-title"><AppIcon name="check" />{{ t('design.resultSaved') }}</p>
+        <details class="result-details"><summary>{{ t('design.demoDetails') }}</summary><p v-if="result.isDemo" class="demo-note">{{ t('gift.mockNotice') }}</p><p class="muted saved-copy">{{ t('gift.saved') }}</p></details>
+        <div class="result-signature"><span><AppIcon name="gift" /></span><p>{{ t('design.giftBranding') }}<strong>Delight AI</strong></p></div>
+      </div>
+      <div class="result-art">
+        <div class="result-frame"><img :src="result.imageUrl" :alt="t(result.isDemo ? `gift.${modeKeys[result.type]}Alt` : 'gift.resultAlt')" :width="result.width" :height="result.height" class="gift-image" /></div>
+        <p class="result-art-caption">{{ t('design.resultFormat') }}</p>
+      </div>
     </div>
     <template v-else>
-      <p class="gift-choice-note">{{ t('gift.oneChoice') }}</p>
-      <div v-if="!form && !generating" class="gift-options">
-        <button v-for="(type, index) in modes" :key="type" type="button" :data-testid="`choose-${type}`" @click="choose(type)"><span>0{{ index + 1 }}</span><strong>{{ t(`gift.${modeKeys[type]}`) }}</strong><small>{{ t(`gift.${modeKeys[type]}Description`) }}</small></button>
+      <div v-if="!form && !generating" class="gift-choice">
+        <div class="gift-section-heading"><h2 tabindex="-1">{{ t('design.giftSelection') }}</h2><p>{{ t('design.selectionDescription') }}</p></div>
+        <div class="gift-options">
+          <button v-for="type in modes" :key="type" type="button" :class="`mode-${type}`" :data-testid="`choose-${type}`" @click="choose(type)">
+            <span class="gift-option-art"><span v-if="isDemo" class="demo-badge">DEMO</span><img :src="`/media/demo-${type}.webp`" alt="" width="600" height="600" /></span>
+            <span class="gift-option-copy"><strong>{{ t(`gift.${modeKeys[type]}`) }}</strong><small>{{ t(`gift.${modeKeys[type]}Description`) }}</small><span class="gift-option-cta">{{ t(`design.createModes.${modeKeys[type]}`) }}<AppIcon name="arrow" /></span></span>
+          </button>
+        </div>
+        <p class="gift-choice-note"><AppIcon name="shield" />{{ t('gift.oneChoice') }}</p>
       </div>
-      <p v-if="isDemo" class="demo-note">{{ t('gift.mockNotice') }}</p>
-      <form v-if="form" class="gift-form" @submit.prevent="create">
-        <p class="eyebrow">{{ t(`gift.${modeKeys[mode]}`) }}<span v-if="isDemo" class="demo-badge">DEMO</span></p>
-        <h2>{{ t('gift.formTitle') }}</h2>
-        <fieldset :disabled="generating" class="gift-fields">
-          <label>{{ t('gift.product') }}<input :value="productName" readonly /></label>
-          <template v-if="mode === 'greeting-card'">
-            <label>{{ t('gift.recipientName') }}<input v-model="recipientName" required maxlength="80" autocomplete="off" aria-describedby="name-hint" /></label>
-            <label>{{ t('gift.occasion') }}<input v-model="occasion" required maxlength="120" :placeholder="t('gift.occasionPlaceholder')" autocomplete="off" aria-describedby="occasion-hint" /></label>
-            <p id="occasion-hint" class="muted">{{ t('gift.occasionHint') }}</p>
-          </template>
-          <label v-if="mode === 'mini-comic'">{{ t('gift.characterName') }}<input v-model="characterName" required maxlength="80" autocomplete="off" aria-describedby="name-hint" /></label>
-          <p v-if="mode !== 'caricature'" id="name-hint" class="muted">{{ t('gift.nameHint') }}</p>
-          <label>{{ t(mode === 'mini-comic' ? 'gift.plotWishes' : 'gift.wishes') }}<textarea v-model="wishes" maxlength="500" rows="3" :placeholder="t(mode === 'mini-comic' ? 'gift.plotPlaceholder' : 'gift.wishesPlaceholder')" aria-describedby="wishes-limit" /></label>
-          <p id="wishes-limit" class="muted">{{ t('gift.wishesLimit') }} · {{ wishes.length }}/500</p>
-          <GiftPhotoInput v-if="mode === 'caricature'" @change="selection = $event" />
-          <button type="submit" class="primary-button" data-testid="create-gift">{{ t('gift.generate') }} <span aria-hidden="true">✦</span></button>
-          <button type="button" class="text-button" data-testid="change-gift-mode" @click="form = false; error = ''; clearPersonalization()">{{ t('gift.changeMode') }}</button>
-        </fieldset>
-      </form>
-      <div v-if="generating" class="gift-progress" role="status" aria-live="polite" data-testid="gift-progress">
-        <span class="gift-spinner" aria-hidden="true">✳</span><strong>{{ t('gift.generating') }}</strong><p>{{ t('gift.wait') }}</p>
+      <div v-if="form || generating" class="studio" :class="[`mode-${mode}`, { 'is-generating': generating, 'resume-progress': generating && !form }]">
+        <div class="studio-layout">
+          <form v-if="form" class="gift-form" @submit.prevent="create">
+            <button type="button" class="studio-back" :disabled="generating" data-testid="change-gift-mode" @click="form = false; error = ''; clearPersonalization()"><AppIcon name="back" />{{ t('gift.changeMode') }}</button>
+            <h2 tabindex="-1"><AppIcon name="spark" />{{ t(`design.studioTitles.${modeKeys[mode]}`) }}</h2>
+            <p class="studio-description">{{ t(`design.studioDescriptions.${modeKeys[mode]}`) }}</p>
+            <fieldset :disabled="generating" class="gift-fields">
+              <label class="purchased-field">{{ t('gift.product') }}<input :value="productName" readonly /></label>
+              <GiftPhotoInput v-if="mode === 'caricature'" @change="selection = $event" />
+              <template v-if="mode === 'greeting-card'">
+                <label>{{ t('gift.recipientName') }}<input v-model="recipientName" required maxlength="80" autocomplete="off" aria-describedby="name-hint" /></label>
+                <label>{{ t('gift.occasion') }}<input v-model="occasion" required maxlength="120" :placeholder="t('gift.occasionPlaceholder')" autocomplete="off" aria-describedby="occasion-hint" /></label><p id="occasion-hint" class="muted field-hint">{{ t('gift.occasionHint') }}</p>
+              </template>
+              <label v-if="mode === 'mini-comic'">{{ t('gift.characterName') }}<input v-model="characterName" required maxlength="80" autocomplete="off" aria-describedby="name-hint" /></label>
+              <p v-if="mode !== 'caricature'" id="name-hint" class="muted field-hint">{{ t('gift.nameHint') }}</p>
+              <label>{{ t(mode === 'mini-comic' ? 'gift.plotWishes' : 'gift.wishes') }}<textarea v-model="wishes" maxlength="500" rows="3" :placeholder="t(mode === 'mini-comic' ? 'gift.plotPlaceholder' : 'gift.wishesPlaceholder')" aria-describedby="wishes-limit" /></label>
+              <p id="wishes-limit" class="muted field-hint character-count">{{ t('gift.wishesLimit') }} · {{ wishes.length }}/500</p>
+              <button type="submit" class="primary-button" data-testid="create-gift">{{ t('gift.generate') }}<AppIcon name="arrow" /></button>
+            </fieldset>
+            <p class="studio-right-note"><AppIcon name="shield" />{{ t('design.oneGift') }}</p>
+          </form>
+          <div class="studio-preview">
+            <div class="preview-heading"><span><AppIcon name="image" />{{ t('design.studioPreview') }}</span><span v-if="isDemo" class="demo-badge">DEMO</span></div>
+            <div class="preview-canvas">
+              <img v-if="form" :src="`/media/demo-${mode}.webp`" :alt="t(`gift.${modeKeys[mode]}Alt`)" width="600" height="600" />
+              <div v-if="generating" class="gift-progress" role="status" aria-live="polite" data-testid="gift-progress"><span class="gift-spinner" aria-hidden="true"><AppIcon /></span><strong>{{ t('gift.generating') }}</strong><p>{{ t('gift.wait') }}</p><div class="progress-dots" aria-hidden="true"><i></i><i></i><i></i></div></div>
+            </div>
+            <div class="preview-meta"><span>{{ t('design.studioMock') }}</span><span>{{ locale.toUpperCase() }} · PNG</span></div>
+            <p class="preview-caption">{{ t('gift.mockNotice') }}</p>
+          </div>
+        </div>
       </div>
-      <div v-if="error" class="notice" role="alert">
-        <p>{{ t(error) }}</p><button v-if="error !== 'errors.GIFT_PERSONALIZATION_INVALID'" type="button" class="text-button" :disabled="submitting" @click="refresh">{{ t('gift.check') }}</button>
-      </div>
+      <p v-if="isDemo && !form && !generating" class="demo-note mock-explanation">{{ t('gift.mockNotice') }}</p>
+      <div v-if="error" class="notice" role="alert"><p>{{ t(error) }}</p><button v-if="error !== 'errors.GIFT_PERSONALIZATION_INVALID'" type="button" class="text-button" :disabled="submitting" @click="refresh">{{ t('gift.check') }}</button></div>
     </template>
   </div>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
+import AppIcon from './AppIcon.vue';
 // Selection and preview only. The parent submits the file after explicit creation.
 const emit = defineEmits<{ change: [selection: { consent: boolean; file?: File }] }>();
 const { t } = useI18n();
@@ -45,11 +46,14 @@ function withoutPhoto() {
   <fieldset class="photo-input">
     <legend>{{ t('photo.title') }}</legend>
     <p>{{ t('photo.purpose') }}</p>
-    <p>{{ t('photo.processing') }}</p>
-    <p id="photo-limits">{{ t('photo.limits') }}</p>
+    <details class="photo-details"><summary>{{ t('design.photoDetails') }}</summary>
+      <p>{{ t('photo.processing') }}</p>
+      <p id="photo-limits">{{ t('photo.limits') }}</p>
+    </details>
     <label class="photo-consent"><input v-model="consent" type="checkbox" />{{ t('photo.consent') }}</label>
-    <label>{{ t('photo.choose') }}
-      <input ref="input" type="file" accept="image/jpeg,image/png,image/webp" :disabled="!consent" aria-describedby="photo-limits" @change="choose" />
+    <label class="photo-picker" :class="{ 'is-disabled': !consent }">
+      <input ref="input" type="file" accept="image/jpeg,image/png,image/webp" :disabled="!consent" :aria-label="t('photo.choose')" aria-describedby="photo-limits" @change="choose" />
+      <span aria-hidden="true"><AppIcon name="image" /><strong>{{ t('photo.choose') }}</strong><small>JPEG · PNG · WebP</small></span>
     </label>
     <p v-if="file" role="status">{{ t('photo.selected') }}</p>
     <img v-if="preview" :src="preview" :alt="t('photo.preview')" class="photo-preview" />

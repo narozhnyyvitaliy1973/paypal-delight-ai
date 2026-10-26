@@ -13,7 +13,8 @@ import {
   type Order,
 } from "./api";
 import { setupPayPal, type PaymentSession } from "./paypal";
-import ProductArt from "./components/ProductArt.vue";
+import ProductPhoto from './components/ProductPhoto.vue';
+import AppIcon from './components/AppIcon.vue';
 
 const { t, locale } = useI18n();
 const legalPage = location.pathname === '/legal' ? 'legal' : location.pathname === '/privacy' ? 'privacy' : null;
@@ -32,6 +33,11 @@ const celebration = ref<Order>();
 const purchases = ref<Order[]>([]);
 const purchasesError = ref('');
 const lastGiftOrder = computed(() => purchases.value[0]?.id);
+function revealPurchases() {
+  const panel = document.getElementById('purchases') as HTMLDetailsElement | null;
+  if (panel) panel.open = true;
+}
+const scrollBehavior = (): ScrollBehavior => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 let giftViewRevision = 0;
 const busy = ref(false);
 const loading = ref(true);
@@ -101,7 +107,7 @@ async function showGift(value: Order) {
   celebration.value = confirmed;
   rememberPurchase(confirmed);
   message.value = '';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: scrollBehavior() });
 }
 function updateGift(value: Order) {
   // A delayed reply from an unmounted gift form must never replace another purchase.
@@ -210,7 +216,7 @@ function selectProduct(product: Product) {
   resetPurchase(product);
   document
     .getElementById("checkout")
-    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    ?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
 }
 async function ensureOrder(): Promise<Order> {
   if (!selected.value) throw new ApiError('INVALID_PRODUCT', '');
@@ -362,167 +368,74 @@ async function loadStore() {
     loading.value = false;
   }
 }
-onMounted(() => { if (!legalPage) void loadStore(); });
+onMounted(async () => {
+  if (!legalPage) {
+    await loadStore();
+    await nextTick();
+    if (location.hash === '#purchases') revealPurchases();
+    if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: scrollBehavior() });
+  }
+});
 </script>
 
 <template>
-  <div class="announcement">
-    {{ t('announcement.title') }}
-    <span>{{ t('announcement.welcome') }}</span>
-  </div>
+  <a class="skip-link" href="#main-content">{{ t('design.skip') }}</a>
   <div class="page-shell">
     <header class="site-header">
-      <a href="/" class="brand"
-        ><span class="brand-mark">d.</span
-        ><span>PayPal Delight <b>AI</b></span></a
-      >
-      <div class="header-actions">
-        <span class="sandbox-tag"><span class="tiny-dot"></span>{{ t('common.sandbox') }}</span>
-        <label class="language-switch">{{ t('common.language') }}
-          <select :value="locale" @change="setLocale(($event.target as HTMLSelectElement).value as Locale)" data-testid="language-switch">
-            <option value="de">DE</option><option value="en">EN</option>
-          </select>
-        </label>
-      </div>
+      <a href="/" class="brand"><span class="brand-mark"><AppIcon /></span><span>PayPal Delight <b>AI</b></span></a>
+      <nav class="main-nav" :aria-label="t('design.navigation')">
+        <a :href="celebration || legalPage ? '/#collection' : '#collection'">{{ t('design.collection') }}</a>
+        <a :href="celebration || legalPage ? '/#how-it-works' : '#how-it-works'">{{ t('design.how') }}</a>
+        <a v-if="purchases.length || purchasesError" :href="celebration ? '/#purchases' : '#purchases'" @click="revealPurchases"><AppIcon name="bag" />{{ t('design.purchases') }}<span class="nav-count">{{ purchases.length }}</span></a>
+      </nav>
+      <div class="header-actions"><span class="sandbox-tag">{{ t('common.sandbox') }}</span><label class="language-switch"><span class="sr-only">{{ t('common.language') }}</span><select :value="locale" @change="setLocale(($event.target as HTMLSelectElement).value as Locale)" data-testid="language-switch"><option value="de">DE</option><option value="en">EN</option></select></label></div>
     </header>
-    <LegalPage v-if="legalPage" :kind="legalPage" />
-    <main v-else>
+    <LegalPage v-if="legalPage" :kind="legalPage" id="main-content" />
+    <main v-else id="main-content" tabindex="-1">
       <p v-if="message" class="notice" role="alert">{{ t(message) }}</p>
-      <section
-        v-if="celebration"
-        class="celebration"
-        aria-labelledby="celebration-title"
-      >
-        <div class="success-icon" aria-hidden="true">✓</div>
-        <p class="eyebrow">
-          {{ t('celebrate.confirmed') }} · {{ formatMoney(celebration.amountMinor) }}
-        </p>
-        <h1 id="celebration-title">{{ t('celebrate.title') }}<br /><em>{{ t('celebrate.accent') }}</em></h1>
-        <p class="celebration-copy">
-          {{ t('celebrate.product', { product: productName(celebration.product) }) }}
-        </p>
-        <div class="gift-banner">
-          <span aria-hidden="true">✦</span>
-          <div>
-            <strong>{{ t(celebration.gift?.status === 'AVAILABLE' ? 'celebrate.available' : celebration.gift?.status === 'COMPLETED' ? 'celebrate.generated' : 'celebrate.reserved') }}</strong>
-            <p>{{ t('celebrate.one') }}</p>
-          </div>
+      <section v-if="celebration" class="celebration" :class="{ 'has-result': celebration.gift?.result }" aria-labelledby="celebration-title">
+        <div class="celebration-heading">
+          <div class="celebrate-confetti" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="success-icon" aria-hidden="true"><AppIcon name="check" /></div>
+          <h1 id="celebration-title">{{ t('design.paymentSuccess') }}</h1>
+          <p class="celebration-copy">{{ t('celebrate.product', { product: productName(celebration.product) }) }}</p>
+        </div>
+        <div class="purchase-context">
+          <div class="context-product"><ProductPhoto :id="celebration.product.id" eager /><div><span class="eyebrow">{{ t('design.purchaseContext') }}</span><strong>{{ productName(celebration.product) }}</strong></div><span class="context-price">{{ formatMoney(celebration.amountMinor) }}</span></div>
+          <div class="gift-banner"><span class="context-gift-icon"><AppIcon name="gift" /></span><div><strong>{{ t(celebration.gift?.status === 'AVAILABLE' ? 'celebrate.available' : celebration.gift?.status === 'COMPLETED' ? 'celebrate.generated' : 'celebrate.reserved') }}</strong><p>{{ t('celebrate.one') }}</p></div></div>
         </div>
         <GiftFlow :key="celebration.id" :order="celebration" :product-name="productName(celebration.product)" :is-demo="store?.gifts.isDemo ?? true" @update="updateGift" />
-        <details class="receipt">
-          <summary>{{ t('celebrate.receipt') }}</summary>
-          <dl>
-            <dt>{{ t('celebrate.order') }}</dt>
-            <dd>{{ celebration.id }}</dd>
-            <dt>{{ t('celebrate.paypalOrder') }}</dt>
-            <dd>{{ celebration.paypalOrderId }}</dd>
-            <dt>{{ t('celebrate.capture') }}</dt>
-            <dd>{{ celebration.captureId }}</dd>
-            <dt>{{ t('common.total') }}</dt>
-            <dd>{{ formatMoney(celebration.amountMinor) }} EUR</dd>
-          </dl>
-        </details>
-        <button class="text-button" @click="returnToStore">
-          {{ t('common.back') }} <span aria-hidden="true">↗</span>
-        </button>
+        <div class="purchase-actions">
+          <details class="receipt"><summary>{{ t('celebrate.receipt') }}</summary><dl><dt>{{ t('celebrate.order') }}</dt><dd>{{ celebration.id }}</dd><dt>{{ t('celebrate.paypalOrder') }}</dt><dd>{{ celebration.paypalOrderId }}</dd><dt>{{ t('celebrate.capture') }}</dt><dd>{{ celebration.captureId }}</dd><dt>{{ t('common.total') }}</dt><dd>{{ formatMoney(celebration.amountMinor) }} EUR</dd></dl></details>
+          <button class="text-button" @click="returnToStore">{{ t('common.back') }}<AppIcon name="arrow" /></button>
+        </div>
       </section>
       <template v-else>
-        <a v-if="lastGiftOrder" :href="`/?order=${lastGiftOrder}`" class="return-gift">{{ t('gift.return') }} ↗</a>
-        <details v-if="purchases.length || purchasesError" class="purchase-history" data-testid="purchase-history">
+        <div v-if="lastGiftOrder" class="return-gift"><AppIcon name="gift" /><a :href="`/?order=${lastGiftOrder}`">{{ t('gift.return') }} <span aria-hidden="true">↗</span></a></div>
+        <details v-if="purchases.length || purchasesError" id="purchases" class="purchase-history" data-testid="purchase-history">
           <summary>{{ t('gift.history') }} <span v-if="purchases.length">({{ purchases.length }})</span></summary>
           <p class="muted">{{ t('gift.historyHint') }}</p>
           <p v-if="purchasesError" role="alert">{{ t(purchasesError) }} <button class="text-button" @click="loadPurchases">{{ t('store.retry') }}</button></p>
-          <ul>
-            <li v-for="purchase in purchases" :key="purchase.id">
-              <a :href="`/?order=${purchase.id}`" :data-testid="`purchase-${purchase.id}`">
-                <strong>{{ productName(purchase.product) }}</strong>
-                <span>{{ purchase.gift?.status === 'COMPLETED' ? t('gift.historyReady') : purchase.gift?.status === 'GENERATING' ? t('gift.generating') : t('gift.historyAvailable') }}</span>
-                <small>{{ t('celebrate.order') }} {{ purchase.id.slice(0, 8) }} · {{ formatMoney(purchase.amountMinor, purchase.currency) }}<template v-if="purchase.gift?.result"> · {{ t(purchase.gift.result.type === 'caricature' ? 'gift.caricature' : purchase.gift.result.type === 'greeting-card' ? 'gift.greeting' : 'gift.comic') }}</template></small>
-              </a>
-            </li>
-          </ul>
+          <ul><li v-for="purchase in purchases" :key="purchase.id"><a :href="`/?order=${purchase.id}`" :data-testid="`purchase-${purchase.id}`"><ProductPhoto :id="purchase.product.id" /><div><strong>{{ productName(purchase.product) }}</strong><span>{{ purchase.gift?.status === 'COMPLETED' ? t('gift.historyReady') : purchase.gift?.status === 'GENERATING' ? t('gift.generating') : t('gift.historyAvailable') }}</span><small>{{ t('celebrate.order') }} {{ purchase.id.slice(0, 8) }} · {{ formatMoney(purchase.amountMinor, purchase.currency) }}<template v-if="purchase.gift?.result"> · {{ t(purchase.gift.result.type === 'caricature' ? 'gift.caricature' : purchase.gift.result.type === 'greeting-card' ? 'gift.greeting' : 'gift.comic') }}</template></small></div><AppIcon name="arrow" /></a></li></ul>
         </details>
         <section class="hero">
-          <div>
-            <p class="eyebrow">{{ t('hero.eyebrow') }}</p>
-            <h1>{{ t('hero.title') }}<br /><em>{{ t('hero.accent') }}</em></h1>
-            <p class="hero-description">
-              {{ t('hero.description') }}<br
-                class="desktop-break"
-              />
-              {{ t('hero.invitation') }}
-            </p>
-            <a class="hero-link" href="#collection"
-              >{{ t('hero.explore') }} <span aria-hidden="true">↓</span></a
-            >
+          <div class="hero-photo" aria-hidden="true"><ProductPhoto kind="mug" eager /></div>
+          <div class="hero-copy">
+            <h1>{{ t('design.heroTitle') }} <em>{{ t('design.heroAccent') }}</em></h1>
+            <p class="hero-description">{{ t('design.heroDescription') }}</p>
+            <div class="hero-benefits"><span><AppIcon name="shield" />{{ t('design.heroBenefitPay') }}</span><span><AppIcon name="gift" />{{ t('design.heroBenefitGift') }}</span><span><AppIcon name="spark" />{{ t('design.heroBenefitSmile') }}</span></div>
+            <p class="hero-demo">{{ t('design.demoShort') }}</p>
           </div>
-          <div
-            class="hero-stamp"
-            :aria-label="t('hero.stampLabel')"
-          >
-            <span class="stamp-star" aria-hidden="true">✳</span
-            ><strong>{{ t('hero.stamp') }}<br />{{ t('hero.stampAccent') }}</strong
-            ><small>{{ t('hero.equation') }}</small>
-          </div>
+          <div class="hero-gift-badge"><AppIcon name="gift" /><div><strong>{{ t('design.included') }}</strong><span>{{ t('design.afterCheckout') }}</span></div></div>
         </section>
         <section id="collection" aria-labelledby="collection-title">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">{{ t('store.eyebrow') }}</p>
-              <h2 id="collection-title">{{ t('store.title') }}</h2>
-            </div>
-            <span class="collection-count">{{ t('store.count') }}</span>
-          </div>
-          <p v-if="loading && !store" role="status" class="loading">
-            {{ t('store.loading') }}
-          </p>
-          <button
-            v-if="!loading && !store"
-            class="primary-button"
-            @click="loadStore"
-          >
-            {{ t('store.retry') }}
-          </button>
-          <div v-if="store" class="product-grid">
-            <article
-              v-for="(product, index) in store.products"
-              :key="product.id"
-              class="product-card"
-              :class="{ selected: selected?.id === product.id }"
-            >
-              <div class="art-panel" :class="product.color">
-                <span class="product-index">0{{ index + 1 }}</span
-                ><span class="gift-pill">{{ t('store.gift') }}</span
-                ><ProductArt :kind="product.art" />
-              </div>
-              <div class="product-heading">
-                <h3>{{ productName(product) }}</h3>
-                <span class="price">{{
-                  formatMoney(product.amountMinor, product.currency)
-                }}</span>
-              </div>
-              <p class="product-description">{{ productDescription(product) }}</p>
-              <button
-                class="choose-button"
-                :class="{ chosen: selected?.id === product.id }"
-                :disabled="
-                  busy ||
-                  Boolean(paymentUncertain) ||
-                  Boolean(order && !terminal)
-                "
-                @click="selectProduct(product)"
-              >
-                {{
-                  selected?.id === product.id
-                    ? t('store.selected')
-                    : t('store.choose')
-                }}
-                <span aria-hidden="true">{{
-                  selected?.id === product.id ? "✓" : "↗"
-                }}</span>
-              </button>
-            </article>
-          </div>
+          <div class="section-heading"><h2 id="collection-title">{{ t('design.favourites') }}</h2><span class="collection-count">{{ t('store.count') }}</span></div>
+          <p v-if="loading && !store" role="status" class="loading">{{ t('store.loading') }}</p><button v-if="!loading && !store" class="primary-button" @click="loadStore">{{ t('store.retry') }}</button>
+          <div v-if="store" class="product-grid"><article v-for="(product, index) in store.products" :key="product.id" class="product-card" :class="{ selected: selected?.id === product.id }">
+            <div class="art-panel" :class="product.color"><span class="product-index">0{{ index + 1 }}</span><span class="gift-pill"><AppIcon name="gift" />{{ t('design.included') }}</span><ProductPhoto :kind="product.art" :alt="productName(product)" /></div>
+            <div class="product-body"><p class="product-category eyebrow">{{ t(`design.categories.${product.art}`) }}</p><div class="product-heading"><h3>{{ productName(product) }}</h3><span class="price">{{ formatMoney(product.amountMinor, product.currency) }}</span></div><p class="product-description">{{ productDescription(product) }}</p><button class="choose-button" :class="{ chosen: selected?.id === product.id }" :disabled="busy || Boolean(paymentUncertain) || Boolean(order && !terminal)" @click="selectProduct(product)">{{ selected?.id === product.id ? t('store.selected') : t('store.choose') }}<AppIcon :name="selected?.id === product.id ? 'check' : 'arrow'" /></button></div>
+          </article></div>
+          <p class="photo-credit-note">{{ t('design.photoNote') }}</p>
         </section>
         <section
           v-if="selected && store"
@@ -536,7 +449,7 @@ onMounted(() => { if (!legalPage) void loadStore(); });
             <h2 id="checkout-title">{{ t('checkout.title') }}</h2>
             <div class="checkout-item">
               <div class="mini-art" :class="selected.color">
-                <ProductArt :kind="selected.art" />
+                <ProductPhoto :kind="selected.art" />
               </div>
               <div>
                 <strong>{{ productName(selected) }}</strong>
@@ -550,7 +463,7 @@ onMounted(() => { if (!legalPage) void loadStore(); });
               <span>{{ t('common.total') }} <small>(EUR)</small></span
               ><strong>{{ formatMoney(selected.amountMinor) }}</strong>
             </div>
-            <p class="demo-note">
+            <div class="checkout-extra"><AppIcon name="gift" /><div><strong>{{ t('design.checkoutExtra') }}</strong><p>{{ t('design.checkoutExtraText') }}</p></div></div><p class="demo-note">
               {{ t('checkout.demo') }}
             </p>
           </div>
@@ -618,30 +531,10 @@ onMounted(() => { if (!legalPage) void loadStore(); });
             </p>
           </div>
         </section>
-        <section class="how-it-works" :aria-label="t('steps.label')">
-          <div>
-            <span>01</span>
-            <h3>{{ t('steps.first') }}</h3>
-            <p>{{ t('steps.firstText') }}</p>
-          </div>
-          <div>
-            <span>02</span>
-            <h3>{{ t('steps.second') }}</h3>
-            <p>{{ t('steps.secondText') }}</p>
-          </div>
-          <div>
-            <span>03</span>
-            <h3>{{ t('steps.third') }}</h3>
-            <p>{{ t('steps.thirdText') }}</p>
-          </div>
-        </section>
+
+        <section id="how-it-works" class="how-section" :aria-label="t('steps.label')"><div class="section-heading"><div><p class="eyebrow">{{ t('design.how') }}</p><h2>{{ t('design.stepsTitle') }}</h2></div><AppIcon name="spark" /></div><div class="how-it-works"><div><span class="step-icon"><AppIcon name="bag" /></span><p class="eyebrow">{{ t('design.stepShop') }}</p><h3>{{ t('steps.first') }}</h3><p>{{ t('steps.firstText') }}</p></div><div><span class="step-icon"><AppIcon name="shield" /></span><p class="eyebrow">{{ t('design.stepPay') }}</p><h3>{{ t('steps.second') }}</h3><p>{{ t('steps.secondText') }}</p></div><div><span class="step-icon"><AppIcon name="gift" /></span><p class="eyebrow">{{ t('design.stepGift') }}</p><h3>{{ t('steps.third') }}</h3><p>{{ t('steps.thirdText') }}</p></div></div></section>
       </template>
     </main>
-    <footer>
-      <span class="footer-brand">{{ t('footer.brand') }}</span
-      ><span>PayPal Delight AI · Hackathon 2026</span
-      ><nav class="legal-links"><a href="/legal">{{ t('footer.legal') }}</a><a href="/privacy">{{ t('footer.privacy') }}</a></nav>
-      <span>{{ t('footer.smile') }} <span aria-hidden="true">✳</span></span>
-    </footer>
+    <footer><div class="footer-top"><div><span class="footer-brand">{{ t('footer.brand') }}<AppIcon /></span><p>{{ t('design.footerNote') }}</p></div><nav class="legal-links"><a href="/legal">{{ t('footer.legal') }}</a><a href="/privacy">{{ t('footer.privacy') }}</a></nav></div><div class="footer-bottom"><span>PayPal Delight AI · Hackathon 2026</span><span>{{ t('design.demoShort') }}</span><span>{{ t('footer.smile') }} <span aria-hidden="true">✳</span></span></div></footer>
   </div>
 </template>
