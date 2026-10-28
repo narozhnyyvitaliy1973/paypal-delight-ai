@@ -6,3 +6,7 @@ for (const mode of ['caricature', 'greeting-card', 'mini-comic']) {
 for (const language of ['en', 'de']) {
   await copyFile(new URL(`../src/assets/gift-footer-${language}.svg`, import.meta.url), new URL(`../dist/assets/gift-footer-${language}.svg`, import.meta.url));
 }
+await mkdir(new URL('../dist/assets/fonts/', import.meta.url), { recursive: true });
+for (const file of ['NotoSans-Regular.ttf', 'OFL.txt']) {
+  await copyFile(new URL(`../src/assets/fonts/${file}`, import.meta.url), new URL(`../dist/assets/fonts/${file}`, import.meta.url));
+}

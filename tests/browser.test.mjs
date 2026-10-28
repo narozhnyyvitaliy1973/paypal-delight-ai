@@ -9,6 +9,8 @@ import { chromium } from "playwright-core";
 import { preview, createServer } from "vite";
 import { fixture } from "../server/test/helpers.mjs";
 import { assertBrandedPng, saveLegacyGift } from '../server/test/image-assertions.mjs';
+import { FakeCloudflare } from '../server/test/cloudflare-helpers.mjs';
+import { releaseReviewedAttempt } from '../server/dist/gifts/limits.js';
 
 // Browser and SDK interactions are simulated; real PayPal approval is a separate owner acceptance test.
 const mockSdk = `
@@ -46,7 +48,7 @@ const mockSdk = `
 
 test(
   "browser checkout scenarios with simulated PayPal v6 and real application HTTP/SQLite",
-  { timeout: 240_000 },
+  { timeout: 360_000 },
   async (t) => {
     const executablePath =
       process.env.BROWSER_EXECUTABLE_PATH ??
@@ -344,7 +346,13 @@ test(
       await f.page.getByRole('heading', { name: 'Legal Notice', exact: true }).waitFor();
       await f.page.getByRole('link', { name: 'Privacy Policy', exact: true }).click();
       await f.page.getByRole('heading', { name: 'Privacy Policy', exact: true }).waitFor();
-      assert.match(await f.page.locator('.legal-page').textContent(), /Photos and wishes are not retained/);
+      assert.match(await f.page.locator('.legal-page').textContent(), /Original and cleaned photos are processed in memory/);
+      assert.match(await f.page.locator('.legal-page').textContent(), /stored PNG can include/);
+      assert.match(await f.page.locator('.legal-page').textContent(), /Cloudflare Workers AI/);
+      await f.page.getByTestId('language-switch').selectOption('de');
+      assert.match(await f.page.locator('.legal-page').textContent(), /Cloudflare-Verarbeitung/);
+      assert.match(await f.page.locator('.legal-page').textContent(), /zweite, separate/);
+      await f.page.getByTestId('language-switch').selectOption('en');
       await f.page.reload();
       assert.equal(await f.page.getByTestId('language-switch').inputValue(), 'en');
       assert.deepEqual(outgoing, []);
@@ -922,6 +930,97 @@ test(
         });
       }
     }
+
+    for (const language of ['en', 'de']) for (const mode of ['caricature', 'greeting-card', 'mini-comic']) {
+      await t.test(`Cloudflare (fake API) ${mode}/${language}: consent, honest preview, result, PNG and reload`, async t => {
+        const cf = new FakeCloudflare();
+        const f = await pageFixture(t, 'approve', { locale: language === 'de' ? 'de-DE' : 'en-US', fixture: cf.options() });
+        const de = language === 'de';
+        await pay(f.page); await f.page.getByTestId(`choose-${mode}`).click();
+        await f.page.setViewportSize({ width: de ? 375 : 1440, height: 1000 });
+        assert.match(await f.page.locator('.preview-caption').innerText(), /Cloudflare/);
+        assert.match(await f.page.locator('.preview-heading .demo-badge').innerText(), de ? /BEISPIEL/ : /SAMPLE/);
+        if (mode === 'caricature') {
+          const consent = f.page.getByRole('checkbox').first();
+          const transfer = f.page.getByTestId('cloudflare-photo-consent');
+          const file = f.page.locator('input[type=file]');
+          assert.equal(await consent.isChecked(), false); assert.equal(await transfer.isChecked(), false);
+          await consent.check(); assert.equal(await file.isDisabled(), true);
+          await transfer.check(); assert.equal(await file.isDisabled(), false);
+          await file.setInputFiles({ name: 'test-reference.png', mimeType: 'image/png', buffer: await cf.image() });
+          await transfer.uncheck(); assert.equal(await file.inputValue(), '');
+          assert.equal(await file.isDisabled(), true);
+          await transfer.check();
+          await file.setInputFiles({ name: 'test-reference.png', mimeType: 'image/png', buffer: await cf.image() });
+        } else {
+          const label = mode === 'greeting-card' ? (de ? 'Name der beschenkten Person' : 'Recipient name') : (de ? 'Name der Comicfigur' : 'Character name');
+          await f.page.getByLabel(label, { exact: true }).fill('Test Alex');
+          if (mode === 'greeting-card') await f.page.getByLabel(de ? 'Anlass' : 'Occasion', { exact: true }).fill(de ? 'Alles Gute!' : 'Best wishes!');
+        }
+        assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await f.page.screenshot({ path: `${screenshots}/stage5-${mode}-${language}-studio.png`, fullPage: true });
+        await f.page.getByTestId('create-gift').click();
+        await f.page.getByTestId('gift-result').waitFor();
+        assert.equal(cf.calls.length, 1);
+        assert.match(await f.page.getByTestId('gift-result').innerText(), /Cloudflare Workers AI/);
+        assert.equal(await f.page.locator('.gift-result .demo-badge').count(), 0);
+        assert.equal(Boolean(cf.calls[0].photo), mode === 'caricature');
+        const downloadEvent = f.page.waitForEvent('download'); await f.page.getByTestId('gift-download').click();
+        const bytes = await readFile(await (await downloadEvent).path());
+        assert.equal((await sharp(bytes).metadata()).format, 'png');
+        const imageUrl = await f.page.locator('.gift-image').getAttribute('src');
+        assert.deepEqual(await (await f.context.request.get(f.origin + imageUrl)).body(), bytes);
+        await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();
+        await f.page.locator('.gift-image').evaluate(image => image.decode());
+        assert.equal(await f.page.getByTestId('language-switch').inputValue(), language);
+        assert.equal(await f.page.getByTestId('create-gift').count(), 0); assert.equal(cf.calls.length, 1);
+        await f.page.screenshot({ path: `${screenshots}/stage5-${mode}-${language}-result.png`, fullPage: true });
+        assert.deepEqual(f.errors, []);
+      });
+    }
+
+    await t.test('Cloudflare uncertainty persists in UI after reload without another generation request', async t => {
+      const cf = new FakeCloudflare(); cf.failure = true;
+      const f = await pageFixture(t, 'approve', { fixture: cf.options() });
+      await pay(f.page); await f.page.getByTestId('choose-caricature').click();
+      await f.page.getByRole('checkbox').first().check();
+      await f.page.getByTestId('cloudflare-photo-consent').check();
+      await f.page.locator('input[type=file]').setInputFiles({ name: 'review-reference.png', mimeType: 'image/png', buffer: await cf.image() });
+      await f.page.getByTestId('create-gift').click(); await f.page.getByTestId('gift-review').waitFor();
+      assert.match(await f.page.getByTestId('gift-review').innerText(), /not used up/);
+      assert.equal(await f.page.getByTestId('create-gift').count(), 0);
+      const id = new URL(f.page.url()).searchParams.get('order');
+      const attempt = f.store.db.prepare('SELECT id FROM ai_attempts WHERE order_id = ?').get(id);
+      releaseReviewedAttempt(f.store.db, id, attempt.id);
+      await f.page.getByTestId('gift-review').getByRole('button').click();
+      await f.page.getByTestId('create-gift').waitFor();
+      assert.equal(await f.page.locator('input[type=file]').inputValue(), '');
+      assert.equal(await f.page.getByRole('checkbox').first().isChecked(), false);
+      assert.equal(await f.page.getByTestId('cloudflare-photo-consent').isChecked(), false);
+      // Explicitly retry without a photo. The old hidden File must not be resent.
+      await f.page.getByTestId('create-gift').click(); await f.page.getByTestId('gift-review').waitFor();
+      assert.equal(cf.calls.length, 2); assert.equal(cf.calls[1].photo, undefined);
+      await f.page.reload(); await f.page.getByTestId('gift-review').waitFor();
+      await f.page.getByTestId('gift-review').getByRole('button').click();
+      assert.equal(cf.calls.length, 2);
+      await f.page.getByTestId('language-switch').selectOption('de');
+      assert.match(await f.page.getByTestId('gift-review').innerText(), /nicht verbraucht/);
+      assert.deepEqual(f.errors, []);
+    });
+
+    await t.test('Cloudflare kill switch shows a clear disabled state; limits preserve manual choice', async t => {
+      const cf = new FakeCloudflare(); const options = cf.options({ enabled: false });
+      const f = await pageFixture(t, 'approve', { fixture: options });
+      await pay(f.page); await f.page.getByTestId('choose-caricature').waitFor();
+      assert.equal(await f.page.getByTestId('choose-caricature').isDisabled(), true);
+      assert.match(await f.page.locator('.gift-flow').innerText(), /switched off/); assert.equal(cf.calls.length, 0);
+      options.settings.ai.enabled = true; options.settings.ai.dailyNeurons = 1;
+      await f.page.reload(); await f.page.getByTestId('choose-caricature').click(); await f.page.getByTestId('create-gift').click();
+      await f.page.getByRole('alert').waitFor();
+      assert.match(await f.page.getByRole('alert').innerText(), /daily AI budget/); assert.equal(cf.calls.length, 0);
+      await f.page.reload(); await f.page.getByTestId('choose-caricature').waitFor();
+      assert.equal(await f.page.getByTestId('choose-caricature').isEnabled(), true);
+    });
 
     await t.test('prepared photo component requires consent, permits withdrawal and makes no upload', async t => {
       const dev = await createServer({

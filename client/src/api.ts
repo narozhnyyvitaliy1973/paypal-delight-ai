@@ -11,14 +11,26 @@ export interface Product {
   translations: { de: { name: string; description: string } };
 }
 export interface Store {
+  labAvailable: boolean;
   products: Product[];
-  gifts: { isDemo: boolean };
+  gifts: { isDemo: boolean; provider: 'mock' | 'cloudflare'; enabled: boolean };
   checkout: {
     enabled: boolean;
     clientId: string | null;
     currency: string;
     environment: "sandbox";
   };
+}
+export type GiftView = Pick<Order, 'id' | 'gift'>;
+export interface GiftInput {
+  type: GiftType; language: string; wishes: string;
+  recipientName?: string; occasion?: string; characterName?: string;
+  photo?: { data: string; contentType: string; consent: boolean; cloudflareConsent?: boolean };
+}
+export interface LabRun {
+  id: string; productId: string; type: GiftType; language: 'en' | 'de';
+  status: 'STARTED' | 'COMPLETED' | 'REJECTED' | 'UNCERTAIN'; createdAt: number;
+  errorCode: string | null; result: NonNullable<Order['gift']>['result'];
 }
 export interface Order {
   id: string;
@@ -36,8 +48,8 @@ export interface Order {
   paypalOrderId: string | null;
   captureId: string | null;
   captureAttempted: boolean;
-  gift: { id: string; status: 'AVAILABLE' | 'GENERATING' | 'COMPLETED'; result: null | {
-    type: GiftType; language: 'en' | 'de'; provider: 'mock' | 'openai'; isDemo: boolean;
+  gift: { id: string; status: 'AVAILABLE' | 'GENERATING' | 'COMPLETED' | 'REVIEW'; result: null | {
+    type: GiftType; language: 'en' | 'de'; provider: 'mock' | 'openai' | 'cloudflare'; isDemo: boolean;
     text: string; width: number; height: number; createdAt: number; imageUrl: string; downloadUrl: string;
   } } | null;
 }
@@ -51,6 +63,7 @@ export class ApiError extends Error {
 }
 export async function api<T>(path: string, body?: unknown): Promise<T> {
   let response: Response;
+  const generatingGift = body !== undefined && /^\/(?:ai-lab\/runs|orders\/[^/]+\/gift)$/.test(path);
   try {
     response = await fetch(`/api${path}`, {
       method: body === undefined ? "GET" : "POST",
@@ -62,7 +75,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           }),
-      signal: AbortSignal.timeout(65_000),
+      signal: AbortSignal.timeout(generatingGift ? 330_000 : 65_000),
     });
   } catch {
     throw new ApiError(

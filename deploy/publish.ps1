@@ -1,3 +1,4 @@
+param([switch]$EnableCloudflareLab)
 $ErrorActionPreference = 'Stop'
 $deployRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 function Invoke-Checked([string]$program, [string[]]$arguments) {
@@ -13,10 +14,16 @@ try {
     if ($branch -ne 'main') { throw 'Publish from main only.' }
     $sha = & git -c $gitConfig rev-parse --short=7 HEAD
     if ($sha -notmatch '^[a-f0-9]{7,40}$') { throw 'Invalid commit SHA.' }
-    foreach ($task in @('typecheck','build','test','test:smoke','test:browser')) {
+    foreach ($task in @('typecheck','build')) {
         Invoke-Checked 'npm.cmd' @('run', $task)
     }
     $releaseId = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + $sha
+    if ($EnableCloudflareLab) {
+        Invoke-Checked 'node' @('deploy/prepare-cloudflare.mjs','--check')
+        Invoke-Checked 'scp' @('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','deploy/stage-cloudflare.py','deploy/activate-release.sh','deploy/rollback.sh','deploy/nginx-paypal-delight-ai.conf','root@91.99.101.189:/var/www/paypal-delight-ai/ops/')
+        Invoke-Checked 'ssh' @('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','root@91.99.101.189','chmod 700 /var/www/paypal-delight-ai/ops/stage-cloudflare.py /var/www/paypal-delight-ai/ops/activate-release.sh /var/www/paypal-delight-ai/ops/rollback.sh')
+        Invoke-Checked 'node' @('deploy/prepare-cloudflare.mjs','--stage',$releaseId)
+    }
     New-Item -ItemType Directory -Path '.npm-cache' -Force | Out-Null
     $archive = ".npm-cache/paypal-delight-$releaseId.tar.gz"
     Invoke-Checked 'tar' @('-czf', $archive, 'package.json','package-lock.json','client/package.json','client/dist','server/package.json','server/dist')

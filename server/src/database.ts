@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { Product } from "./catalog.js";
 import { AppError } from "./errors.js";
 import type { GiftType } from './gifts/provider.js';
+import { expireAiAttempts } from './gifts/limits.js';
 
 export type OrderStatus =
   | "CREATING"
@@ -37,8 +38,8 @@ export interface Order {
 export interface Gift {
   id: string;
   order_id: string;
-  status: "AVAILABLE" | "GENERATING" | "COMPLETED";
-  result: null | { type: GiftType; language: 'en' | 'de'; provider: 'mock' | 'openai'; isDemo: boolean; text: string; width: number; height: number; createdAt: number; imageUrl: string; downloadUrl: string };
+  status: "AVAILABLE" | "GENERATING" | "COMPLETED" | "REVIEW";
+  result: null | { type: GiftType; language: 'en' | 'de'; provider: 'mock' | 'openai' | 'cloudflare'; isDemo: boolean; text: string; width: number; height: number; createdAt: number; imageUrl: string; downloadUrl: string };
 }
 
 export class OrderStore {
@@ -51,7 +52,7 @@ export class OrderStore {
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("busy_timeout = 5000");
     const version = this.db.pragma("user_version", { simple: true });
-    if (version !== 0 && version !== 1 && version !== 2) {
+    if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4) {
       this.db.close();
       throw new Error("Unsupported database schema version.");
     }
@@ -79,7 +80,7 @@ export class OrderStore {
         WHEN (SELECT status FROM orders WHERE id = NEW.order_id) != 'COMPLETED'
         BEGIN SELECT RAISE(ABORT, 'Payment required'); END;
       `);
-      if (version !== 2) {
+      if (version === 0 || version === 1) {
         // Additive migration: payment rows and existing entitlements stay intact.
         // Keep the original SQL status names; expose the new lifecycle through gift().
         this.db.exec(`
@@ -91,6 +92,30 @@ export class OrderStore {
           PRAGMA user_version = 2;
         `);
       }
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_attempts (
+          id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id),
+          mode TEXT NOT NULL CHECK(mode IN ('caricature','greeting-card','mini-comic')),
+          status TEXT NOT NULL CHECK(status IN ('STARTED','COMPLETED','REJECTED','UNCERTAIN','RELEASED')),
+          started_at INTEGER NOT NULL, deadline INTEGER NOT NULL, finished_at INTEGER,
+          estimated_neurons INTEGER NOT NULL CHECK(estimated_neurons > 0)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ai_one_active_attempt ON ai_attempts(order_id)
+          WHERE status IN ('STARTED','UNCERTAIN','COMPLETED');
+        CREATE INDEX IF NOT EXISTS ai_daily_usage ON ai_attempts(deadline);
+        CREATE TABLE IF NOT EXISTS ai_lab_runs (
+          id TEXT PRIMARY KEY, owner_hash TEXT NOT NULL, product_id TEXT NOT NULL,
+          mode TEXT NOT NULL CHECK(mode IN ('caricature','greeting-card','mini-comic')),
+          language TEXT NOT NULL CHECK(language IN ('en','de')),
+          status TEXT NOT NULL CHECK(status IN ('STARTED','COMPLETED','REJECTED','UNCERTAIN')),
+          started_at INTEGER NOT NULL, deadline INTEGER NOT NULL, finished_at INTEGER,
+          estimated_neurons INTEGER NOT NULL CHECK(estimated_neurons >= 0),
+          error_code TEXT, result_json TEXT, image BLOB
+        );
+        CREATE INDEX IF NOT EXISTS ai_lab_owner ON ai_lab_runs(owner_hash, started_at);
+        CREATE INDEX IF NOT EXISTS ai_lab_daily ON ai_lab_runs(deadline);
+        PRAGMA user_version = 4;
+      `);
     })();
   }
 
@@ -242,14 +267,17 @@ export class OrderStore {
       .immediate();
   }
   gift(id: string) {
-    // A crashed process cannot reserve an entitlement forever. Never reset a live lease.
-    this.db.prepare("UPDATE gift_entitlements SET status = 'AVAILABLE', lock_token = NULL, lock_until = 0 WHERE order_id = ? AND status = 'RESERVED' AND lock_until <= ?").run(id, Date.now());
+    // Mock leases are recoverable. A dispatched AI request must NEVER auto-retry,
+    // including after a crash, server restart or switching back to the mock provider.
+    expireAiAttempts(this.db);
+    this.db.prepare("UPDATE gift_entitlements SET status = 'AVAILABLE', lock_token = NULL, lock_until = 0 WHERE order_id = ? AND status = 'RESERVED' AND lock_until <= ? AND NOT EXISTS (SELECT 1 FROM ai_attempts WHERE order_id = gift_entitlements.order_id AND status IN ('STARTED','UNCERTAIN','COMPLETED'))").run(id, Date.now());
     const row = this.db.prepare('SELECT id, order_id, status, result_json FROM gift_entitlements WHERE order_id = ?').get(id) as
       { id: string; order_id: string; status: 'AVAILABLE' | 'RESERVED' | 'GENERATED'; result_json: string | null } | undefined;
     if (!row) return undefined;
+    const review = this.db.prepare("SELECT 1 FROM ai_attempts WHERE order_id = ? AND status = 'UNCERTAIN'").get(id);
     return {
       id: row.id, order_id: row.order_id,
-      status: row.status === 'RESERVED' ? 'GENERATING' : row.status === 'GENERATED' ? 'COMPLETED' : 'AVAILABLE',
+      status: row.status === 'GENERATED' ? 'COMPLETED' : review ? 'REVIEW' : row.status === 'RESERVED' ? 'GENERATING' : 'AVAILABLE',
       result: row.result_json ? { ...JSON.parse(row.result_json), imageUrl: `/api/orders/${id}/gift/image`, downloadUrl: `/api/orders/${id}/gift/download` } : null,
     } as Gift;
   }

@@ -46,23 +46,36 @@ elif [[ -e "$APP/current" ]]; then echo 'current must be a symlink' >&2; exit 1;
 if [[ -n "$PREVIOUS" ]]; then
     [[ "$PREVIOUS" == "$APP/releases/"* ]] && test -d "$PREVIOUS"
 fi
-# Consistent snapshot before migrations, including WAL. No secrets in the archive.
-if [[ -f "$APP/shared/delight.sqlite" ]]; then
-    python3 - "$APP/shared/delight.sqlite" "$APP/backups/before-$RELEASE_ID.sqlite" <<'PY'
-import sqlite3, sys, os
-os.umask(0o077)
-with sqlite3.connect(sys.argv[1]) as source, sqlite3.connect(sys.argv[2]) as target:
-    source.backup(target)
-PY
+BACKUP="$APP/backups/before-$RELEASE_ID"
+install -d -m 0700 "$BACKUP"
+cp -p /etc/paypal-delight-ai/runtime.env "$BACKUP/runtime.env"
+cp -p /etc/nginx/sites-available/paypal-delight-ai "$BACKUP/nginx.conf"
+if [[ -f /etc/paypal-delight-ai/nginx/lab.conf ]]; then
+    cp -p /etc/paypal-delight-ai/nginx/lab.conf "$BACKUP/lab.conf"
 fi
+STAGED="/etc/paypal-delight-ai/next-$RELEASE_ID"
+CONFIG_CHANGED=0
 rollback() {
     code=$?
     trap - ERR
+    set +e
+    systemctl stop paypal-delight-ai.service
+    # Each stage keeps its own database. Restore the previous path, never its data.
+    cp -p "$BACKUP/runtime.env" /etc/paypal-delight-ai/runtime.env
+    if [[ -f "$BACKUP/lab.conf" ]]; then
+        cp -p "$BACKUP/lab.conf" /etc/paypal-delight-ai/nginx/lab.conf
+    elif [[ "$CONFIG_CHANGED" == 1 ]]; then
+        rm -f /etc/paypal-delight-ai/nginx/lab.conf
+    fi
     if [[ -n "$PREVIOUS" ]]; then
         ln -s "$PREVIOUS" "$APP/current.rollback"
         mv -Tf "$APP/current.rollback" "$APP/current"
         systemctl restart paypal-delight-ai.service
-        echo 'Activation failed; previous PayPal release restored. Shared DB not rolled back.' >&2
+        if curl --fail --silent --retry 15 --retry-connrefused --retry-delay 1 --max-time 4 http://127.0.0.1:8003/api/health >/dev/null; then
+            cp -p "$BACKUP/nginx.conf" /etc/nginx/sites-available/paypal-delight-ai
+            if nginx -t && systemctl reload nginx; then rm -f "$APP/maintenance"; fi
+        fi
+        echo 'Activation failed; previous PayPal release and runtime restored. Databases were not replaced.' >&2
     else
         systemctl stop paypal-delight-ai.service || true
         echo 'First activation failed; only PayPal service stopped.' >&2
@@ -70,12 +83,29 @@ rollback() {
     exit "$code"
 }
 trap rollback ERR
+# Only this vhost enters maintenance. Adjacent services are never restarted.
+touch "$APP/maintenance"
+install -d -m 0700 /etc/paypal-delight-ai/nginx
+install -m 0644 "$APP/ops/nginx-paypal-delight-ai.conf" /etc/nginx/sites-available/paypal-delight-ai
+nginx -t
+systemctl reload nginx
+# Graceful stop drains already accepted requests before switching runtime settings.
+systemctl stop paypal-delight-ai.service
+if [[ -f "$STAGED.env" ]]; then
+    test -f "$STAGED.conf"
+    install -m 0600 "$STAGED.env" /etc/paypal-delight-ai/runtime.env
+    install -m 0600 "$STAGED.conf" /etc/paypal-delight-ai/nginx/lab.conf
+    CONFIG_CHANGED=1
+    nginx -t
+    systemctl reload nginx
+fi
 test ! -e "$APP/current.next"
 ln -s "$RELEASE" "$APP/current.next"
 mv -Tf "$APP/current.next" "$APP/current"
 systemctl restart paypal-delight-ai.service
 curl --fail --silent --show-error --retry 15 --retry-connrefused --retry-delay 1 --max-time 4 http://127.0.0.1:8003/api/health
 if [[ -n "$PREVIOUS" ]]; then printf '%s\n' "$PREVIOUS" > "$APP/ops/previous-release"; fi
+rm -f "$APP/maintenance" "$STAGED.env" "$STAGED.conf"
 trap - ERR
 echo
 printf 'Active release: %s\n' "$RELEASE_ID"

@@ -1,0 +1,48 @@
+export const labCopy = {
+  en: {
+    lab: {
+      title: 'AI Test Studio', description: 'Explore all three formats without another purchase. Each new test is started manually.',
+      product: 'Product for this test', newTest: 'New test', resultTitle: 'Your test image is ready',
+      resultSaved: 'Saved in your test history', aiFooter: 'Private AI testing · Cloudflare Workers AI', mockFooter: 'Private testing · Prepared DEMO illustrations',
+      separate: 'Private quality testing. No payment is made and no purchase gift right is created or used.',
+      saved: 'This test image is saved separately from purchases and is available in this browser session.',
+      aiProcessing: 'Your selected product, language, occasion and wishes are sent to Cloudflare Workers AI. Names are added locally. Avoid sensitive information. The resulting PNG is saved in your private test history, separately from purchases.',
+      history: 'Your test images', budget: 'Today, across gifts and tests: {requests}/{maxRequests} attempts · {neurons}/{maxNeurons} estimated Neurons.',
+      reset: 'Daily allowance resets at {time}. Failures count too. Other Cloudflare applications are not included in this estimate.',
+      status: { STARTED: 'Generating', COMPLETED: 'Ready', REJECTED: 'Not completed', UNCERTAIN: 'Outcome unknown' },
+      errors: { AI_DISABLED: 'AI testing is currently switched off.', AI_BUSY: 'All generation slots are busy. Please wait before starting this test.',
+        AI_SESSION_LIMIT: 'This browser has reached its daily test and gift allowance. It resets at 00:00 UTC.',
+        AI_DAILY_LIMIT: 'The shared daily AI budget is exhausted. It resets at 00:00 UTC.' },
+    },
+    errors: {
+      AI_LAB_UNAVAILABLE: 'This private test studio is disabled or access has not been authorised. Open the password-protected test website.',
+      AI_LAB_NOT_FOUND: 'This test was not found in this browser session. Open a saved test or start a new one.',
+      AI_LAB_REJECTED: 'This test did not produce an image. Its attempt remains in the budget. You can start a new test manually.',
+      AI_LAB_UNCERTAIN: 'The result could not be confirmed. This attempt still counts towards the budget. No automatic retry will run. You may start a separate new test.',
+      AI_LAB_NETWORK: 'Connection interrupted. Check this test before starting another one; refreshing does not generate an image.',
+    },
+  },
+  de: {
+    lab: {
+      title: 'KI-Teststudio', description: 'Teste alle drei Formate ohne weiteren Kauf. Jeder neue Test wird von dir gestartet.',
+      product: 'Produkt für diesen Test', newTest: 'Neuer Test', resultTitle: 'Dein Testbild ist fertig',
+      resultSaved: 'In deiner Testhistorie gespeichert', aiFooter: 'Private KI-Tests · Cloudflare Workers AI', mockFooter: 'Private Tests · Vorbereitete DEMO-Bilder',
+      separate: 'Geschützter Qualitätstest. Es wird weder bezahlt noch ein Geschenkanspruch aus einem Kauf erstellt oder verbraucht.',
+      saved: 'Dieses Testbild wird getrennt von Käufen gespeichert und bleibt in dieser Browsersitzung verfügbar.',
+      aiProcessing: 'Gewähltes Produkt, Sprache, Anlass und Wünsche werden an Cloudflare Workers AI gesendet. Namen werden lokal ergänzt. Vermeide sensible Angaben. Das fertige PNG wird in deiner privaten Testhistorie gespeichert, getrennt von Käufen.',
+      history: 'Deine Testbilder', budget: 'Heute, für Geschenke und Tests zusammen: {requests}/{maxRequests} Versuche · {neurons}/{maxNeurons} geschätzte Neurons.',
+      reset: 'Das Tageskontingent wird um {time} zurückgesetzt. Fehlversuche zählen mit. Andere Cloudflare-Anwendungen sind in dieser Schätzung nicht enthalten.',
+      status: { STARTED: 'Wird erstellt', COMPLETED: 'Fertig', REJECTED: 'Nicht abgeschlossen', UNCERTAIN: 'Ergebnis ungewiss' },
+      errors: { AI_DISABLED: 'KI-Tests sind derzeit ausgeschaltet.', AI_BUSY: 'Alle Generierungsplätze sind belegt. Warte bitte, bevor du diesen Test startest.',
+        AI_SESSION_LIMIT: 'Dieser Browser hat sein Tageskontingent für Tests und Geschenke erreicht. Es wird um 00:00 UTC zurückgesetzt.',
+        AI_DAILY_LIMIT: 'Das gemeinsame KI-Tagesbudget ist aufgebraucht. Es wird um 00:00 UTC zurückgesetzt.' },
+    },
+    errors: {
+      AI_LAB_UNAVAILABLE: 'Dieses private Teststudio ist deaktiviert oder der Zugriff wurde nicht autorisiert. Öffne die passwortgeschützte Testwebsite.',
+      AI_LAB_NOT_FOUND: 'Dieser Test wurde in dieser Browsersitzung nicht gefunden. Öffne einen gespeicherten Test oder starte einen neuen.',
+      AI_LAB_REJECTED: 'Dieser Test hat kein Bild geliefert. Der Versuch bleibt im Budget erfasst. Du kannst manuell einen neuen Test starten.',
+      AI_LAB_UNCERTAIN: 'Das Ergebnis konnte nicht bestätigt werden. Dieser Versuch zählt weiterhin zum Budget. Es gibt keine automatische Wiederholung. Du kannst einen separaten neuen Test starten.',
+      AI_LAB_NETWORK: 'Die Verbindung wurde unterbrochen. Prüfe diesen Test, bevor du einen weiteren startest. Aktualisieren erzeugt kein Bild.',
+    },
+  },
+};

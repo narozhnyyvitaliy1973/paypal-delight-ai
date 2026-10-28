@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { errorKey, setLocale, type Locale } from './i18n';
 import LegalPage from './components/LegalPage.vue';
 import GiftFlow from './components/GiftFlow.vue';
+import AiLab from './components/AiLab.vue';
 import {
   api,
   ApiError,
@@ -11,12 +12,14 @@ import {
   type Store,
   type Product,
   type Order,
+  type GiftView,
 } from "./api";
 import { setupPayPal, type PaymentSession } from "./paypal";
 import ProductPhoto from './components/ProductPhoto.vue';
 import AppIcon from './components/AppIcon.vue';
 
 const { t, locale } = useI18n();
+const labPage = location.pathname === '/ai-lab';
 const legalPage = location.pathname === '/legal' ? 'legal' : location.pathname === '/privacy' ? 'privacy' : null;
 const formatMoney = (minor: number, currency = 'EUR') => formatValue(minor, currency, locale.value);
 function productName(product: { id: string; name: string }) {
@@ -109,12 +112,13 @@ async function showGift(value: Order) {
   message.value = '';
   window.scrollTo({ top: 0, behavior: scrollBehavior() });
 }
-function updateGift(value: Order) {
+function updateGift(value: GiftView) {
   // A delayed reply from an unmounted gift form must never replace another purchase.
   if (celebration.value?.id !== value.id) return;
-  celebration.value = value;
-  if (order.value?.id === value.id) order.value = value;
-  rememberPurchase(value);
+  const updated = { ...celebration.value, gift: value.gift };
+  celebration.value = updated;
+  if (order.value?.id === value.id) order.value = updated;
+  rememberPurchase(updated);
 }
 async function acceptOrder(value: Order) {
   order.value = value;
@@ -369,7 +373,7 @@ async function loadStore() {
   }
 }
 onMounted(async () => {
-  if (!legalPage) {
+  if (!legalPage && !labPage) {
     await loadStore();
     await nextTick();
     if (location.hash === '#purchases') revealPurchases();
@@ -384,13 +388,15 @@ onMounted(async () => {
     <header class="site-header">
       <a href="/" class="brand"><span class="brand-mark"><AppIcon /></span><span>PayPal Delight <b>AI</b></span></a>
       <nav class="main-nav" :aria-label="t('design.navigation')">
-        <a :href="celebration || legalPage ? '/#collection' : '#collection'">{{ t('design.collection') }}</a>
-        <a :href="celebration || legalPage ? '/#how-it-works' : '#how-it-works'">{{ t('design.how') }}</a>
+        <a :href="celebration || legalPage || labPage ? '/#collection' : '#collection'">{{ t('design.collection') }}</a>
+        <a :href="celebration || legalPage || labPage ? '/#how-it-works' : '#how-it-works'">{{ t('design.how') }}</a>
         <a v-if="purchases.length || purchasesError" :href="celebration ? '/#purchases' : '#purchases'" @click="revealPurchases"><AppIcon name="bag" />{{ t('design.purchases') }}<span class="nav-count">{{ purchases.length }}</span></a>
+        <a v-if="store?.labAvailable || labPage" href="/ai-lab">{{ t('lab.title') }}</a>
       </nav>
       <div class="header-actions"><span class="sandbox-tag">{{ t('common.sandbox') }}</span><label class="language-switch"><span class="sr-only">{{ t('common.language') }}</span><select :value="locale" @change="setLocale(($event.target as HTMLSelectElement).value as Locale)" data-testid="language-switch"><option value="de">DE</option><option value="en">EN</option></select></label></div>
     </header>
     <LegalPage v-if="legalPage" :kind="legalPage" id="main-content" />
+    <AiLab v-else-if="labPage" id="main-content" @configuration="store = $event" />
     <main v-else id="main-content" tabindex="-1">
       <p v-if="message" class="notice" role="alert">{{ t(message) }}</p>
       <section v-if="celebration" class="celebration" :class="{ 'has-result': celebration.gift?.result }" aria-labelledby="celebration-title">
@@ -404,7 +410,7 @@ onMounted(async () => {
           <div class="context-product"><ProductPhoto :id="celebration.product.id" eager /><div><span class="eyebrow">{{ t('design.purchaseContext') }}</span><strong>{{ productName(celebration.product) }}</strong></div><span class="context-price">{{ formatMoney(celebration.amountMinor) }}</span></div>
           <div class="gift-banner"><span class="context-gift-icon"><AppIcon name="gift" /></span><div><strong>{{ t(celebration.gift?.status === 'AVAILABLE' ? 'celebrate.available' : celebration.gift?.status === 'COMPLETED' ? 'celebrate.generated' : 'celebrate.reserved') }}</strong><p>{{ t('celebrate.one') }}</p></div></div>
         </div>
-        <GiftFlow :key="celebration.id" :order="celebration" :product-name="productName(celebration.product)" :is-demo="store?.gifts.isDemo ?? true" @update="updateGift" />
+        <GiftFlow :key="celebration.id" :order="celebration" :product-name="productName(celebration.product)" :is-demo="store?.gifts.isDemo ?? true" :provider="store?.gifts.provider" :ai-enabled="store?.gifts.enabled" @update="updateGift" />
         <div class="purchase-actions">
           <details class="receipt"><summary>{{ t('celebrate.receipt') }}</summary><dl><dt>{{ t('celebrate.order') }}</dt><dd>{{ celebration.id }}</dd><dt>{{ t('celebrate.paypalOrder') }}</dt><dd>{{ celebration.paypalOrderId }}</dd><dt>{{ t('celebrate.capture') }}</dt><dd>{{ celebration.captureId }}</dd><dt>{{ t('common.total') }}</dt><dd>{{ formatMoney(celebration.amountMinor) }} EUR</dd></dl></details>
           <button class="text-button" @click="returnToStore">{{ t('common.back') }}<AppIcon name="arrow" /></button>
@@ -416,7 +422,7 @@ onMounted(async () => {
           <summary>{{ t('gift.history') }} <span v-if="purchases.length">({{ purchases.length }})</span></summary>
           <p class="muted">{{ t('gift.historyHint') }}</p>
           <p v-if="purchasesError" role="alert">{{ t(purchasesError) }} <button class="text-button" @click="loadPurchases">{{ t('store.retry') }}</button></p>
-          <ul><li v-for="purchase in purchases" :key="purchase.id"><a :href="`/?order=${purchase.id}`" :data-testid="`purchase-${purchase.id}`"><ProductPhoto :id="purchase.product.id" /><div><strong>{{ productName(purchase.product) }}</strong><span>{{ purchase.gift?.status === 'COMPLETED' ? t('gift.historyReady') : purchase.gift?.status === 'GENERATING' ? t('gift.generating') : t('gift.historyAvailable') }}</span><small>{{ t('celebrate.order') }} {{ purchase.id.slice(0, 8) }} · {{ formatMoney(purchase.amountMinor, purchase.currency) }}<template v-if="purchase.gift?.result"> · {{ t(purchase.gift.result.type === 'caricature' ? 'gift.caricature' : purchase.gift.result.type === 'greeting-card' ? 'gift.greeting' : 'gift.comic') }}</template></small></div><AppIcon name="arrow" /></a></li></ul>
+          <ul><li v-for="purchase in purchases" :key="purchase.id"><a :href="`/?order=${purchase.id}`" :data-testid="`purchase-${purchase.id}`"><ProductPhoto :id="purchase.product.id" /><div><strong>{{ productName(purchase.product) }}</strong><span>{{ purchase.gift?.status === 'COMPLETED' ? t('gift.historyReady') : purchase.gift?.status === 'GENERATING' ? t('gift.generating') : purchase.gift?.status === 'REVIEW' ? t('gift.reviewTitle') : t('gift.historyAvailable') }}</span><small>{{ t('celebrate.order') }} {{ purchase.id.slice(0, 8) }} · {{ formatMoney(purchase.amountMinor, purchase.currency) }}<template v-if="purchase.gift?.result"> · {{ t(purchase.gift.result.type === 'caricature' ? 'gift.caricature' : purchase.gift.result.type === 'greeting-card' ? 'gift.greeting' : 'gift.comic') }}</template></small></div><AppIcon name="arrow" /></a></li></ul>
         </details>
         <section class="hero">
           <div class="hero-photo" aria-hidden="true"><ProductPhoto kind="mug" eager /></div>
@@ -424,7 +430,7 @@ onMounted(async () => {
             <h1>{{ t('design.heroTitle') }} <em>{{ t('design.heroAccent') }}</em></h1>
             <p class="hero-description">{{ t('design.heroDescription') }}</p>
             <div class="hero-benefits"><span><AppIcon name="shield" />{{ t('design.heroBenefitPay') }}</span><span><AppIcon name="gift" />{{ t('design.heroBenefitGift') }}</span><span><AppIcon name="spark" />{{ t('design.heroBenefitSmile') }}</span></div>
-            <p class="hero-demo">{{ t('design.demoShort') }}</p>
+            <p class="hero-demo">{{ t(store?.gifts.isDemo === false ? 'gift.aiShort' : 'design.demoShort') }}</p>
           </div>
           <div class="hero-gift-badge"><AppIcon name="gift" /><div><strong>{{ t('design.included') }}</strong><span>{{ t('design.afterCheckout') }}</span></div></div>
         </section>
@@ -532,9 +538,9 @@ onMounted(async () => {
           </div>
         </section>
 
-        <section id="how-it-works" class="how-section" :aria-label="t('steps.label')"><div class="section-heading"><div><p class="eyebrow">{{ t('design.how') }}</p><h2>{{ t('design.stepsTitle') }}</h2></div><AppIcon name="spark" /></div><div class="how-it-works"><div><span class="step-icon"><AppIcon name="bag" /></span><p class="eyebrow">{{ t('design.stepShop') }}</p><h3>{{ t('steps.first') }}</h3><p>{{ t('steps.firstText') }}</p></div><div><span class="step-icon"><AppIcon name="shield" /></span><p class="eyebrow">{{ t('design.stepPay') }}</p><h3>{{ t('steps.second') }}</h3><p>{{ t('steps.secondText') }}</p></div><div><span class="step-icon"><AppIcon name="gift" /></span><p class="eyebrow">{{ t('design.stepGift') }}</p><h3>{{ t('steps.third') }}</h3><p>{{ t('steps.thirdText') }}</p></div></div></section>
+        <section id="how-it-works" class="how-section" :aria-label="t('steps.label')"><div class="section-heading"><div><p class="eyebrow">{{ t('design.how') }}</p><h2>{{ t('design.stepsTitle') }}</h2></div><AppIcon name="spark" /></div><div class="how-it-works"><div><span class="step-icon"><AppIcon name="bag" /></span><p class="eyebrow">{{ t('design.stepShop') }}</p><h3>{{ t('steps.first') }}</h3><p>{{ t('steps.firstText') }}</p></div><div><span class="step-icon"><AppIcon name="shield" /></span><p class="eyebrow">{{ t('design.stepPay') }}</p><h3>{{ t('steps.second') }}</h3><p>{{ t('steps.secondText') }}</p></div><div><span class="step-icon"><AppIcon name="gift" /></span><p class="eyebrow">{{ t('design.stepGift') }}</p><h3>{{ t('steps.third') }}</h3><p>{{ t(store?.gifts.isDemo === false ? 'gift.aiSteps' : 'steps.thirdText') }}</p></div></div></section>
       </template>
     </main>
-    <footer><div class="footer-top"><div><span class="footer-brand">{{ t('footer.brand') }}<AppIcon /></span><p>{{ t('design.footerNote') }}</p></div><nav class="legal-links"><a href="/legal">{{ t('footer.legal') }}</a><a href="/privacy">{{ t('footer.privacy') }}</a></nav></div><div class="footer-bottom"><span>PayPal Delight AI · Hackathon 2026</span><span>{{ t('design.demoShort') }}</span><span>{{ t('footer.smile') }} <span aria-hidden="true">✳</span></span></div></footer>
+    <footer><div class="footer-top"><div><span class="footer-brand">{{ t('footer.brand') }}<AppIcon /></span><p>{{ t('design.footerNote') }}</p></div><nav class="legal-links"><a href="/legal">{{ t('footer.legal') }}</a><a href="/privacy">{{ t('footer.privacy') }}</a></nav></div><div class="footer-bottom"><span>PayPal Delight AI · Hackathon 2026</span><span>{{ t(labPage ? (store?.gifts.isDemo === false ? 'lab.aiFooter' : 'lab.mockFooter') : (store?.gifts.isDemo === false ? 'gift.aiShort' : 'design.demoShort')) }}</span><span>{{ t('footer.smile') }} <span aria-hidden="true">✳</span></span></div></footer>
   </div>
 </template>

@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIcon from './AppIcon.vue';
 // Selection and preview only. The parent submits the file after explicit creation.
-const emit = defineEmits<{ change: [selection: { consent: boolean; file?: File }] }>();
+const props = defineProps<{ cloudflare?: boolean }>();
+const emit = defineEmits<{ change: [selection: { consent: boolean; cloudflareConsent: boolean; file?: File }] }>();
 const { t } = useI18n();
 const consent = ref(false);
+const cloudflareConsent = ref(false);
+const allowed = computed(() => consent.value && (!props.cloudflare || cloudflareConsent.value));
 const file = ref<File>();
 const input = ref<HTMLInputElement>();
 const error = ref('');
@@ -19,40 +22,43 @@ function clearFile() {
   file.value = undefined;
   if (input.value) input.value.value = '';
 }
-watch(consent, value => {
+watch(allowed, value => {
   if (!value) clearFile();
   error.value = '';
-  emit('change', { consent: value, file: file.value });
+  emit('change', { consent: consent.value, cloudflareConsent: cloudflareConsent.value, file: file.value });
 });
+watch(() => props.cloudflare, () => { consent.value = false; cloudflareConsent.value = false; clearFile(); });
 function choose(event: Event) {
   const candidate = (event.target as HTMLInputElement).files?.[0];
   error.value = '';
-  if (!consent.value) error.value = 'photo.required';
+  if (!allowed.value) error.value = 'photo.required';
   else if (candidate && !['image/jpeg', 'image/png', 'image/webp'].includes(candidate.type)) error.value = 'photo.format';
   else if (candidate && (candidate.size > 5 * 1024 * 1024 || candidate.size === 0)) error.value = 'photo.size';
   if (error.value) clearFile();
   else file.value = candidate;
-  emit('change', { consent: consent.value, file: file.value });
+  emit('change', { consent: consent.value, cloudflareConsent: cloudflareConsent.value, file: file.value });
 }
 function withoutPhoto() {
   consent.value = false;
+  cloudflareConsent.value = false;
   clearFile();
   error.value = '';
-  emit('change', { consent: false });
+  emit('change', { consent: false, cloudflareConsent: false });
 }
 </script>
 
 <template>
   <fieldset class="photo-input">
     <legend>{{ t('photo.title') }}</legend>
-    <p>{{ t('photo.purpose') }}</p>
+    <p>{{ t(cloudflare ? 'photo.cloudflarePurpose' : 'photo.purpose') }}</p>
     <details class="photo-details"><summary>{{ t('design.photoDetails') }}</summary>
-      <p>{{ t('photo.processing') }}</p>
+      <p>{{ t(cloudflare ? 'photo.cloudflareProcessing' : 'photo.processing') }}</p>
       <p id="photo-limits">{{ t('photo.limits') }}</p>
     </details>
     <label class="photo-consent"><input v-model="consent" type="checkbox" />{{ t('photo.consent') }}</label>
-    <label class="photo-picker" :class="{ 'is-disabled': !consent }">
-      <input ref="input" type="file" accept="image/jpeg,image/png,image/webp" :disabled="!consent" :aria-label="t('photo.choose')" aria-describedby="photo-limits" @change="choose" />
+    <label v-if="cloudflare" class="photo-consent"><input v-model="cloudflareConsent" type="checkbox" data-testid="cloudflare-photo-consent" />{{ t('photo.cloudflareConsent') }}</label>
+    <label class="photo-picker" :class="{ 'is-disabled': !allowed }">
+      <input ref="input" type="file" accept="image/jpeg,image/png,image/webp" :disabled="!allowed" :aria-label="t('photo.choose')" aria-describedby="photo-limits" @change="choose" />
       <span aria-hidden="true"><AppIcon name="image" /><strong>{{ t('photo.choose') }}</strong><small>JPEG · PNG · WebP</small></span>
     </label>
     <p v-if="file" role="status">{{ t('photo.selected') }}</p>

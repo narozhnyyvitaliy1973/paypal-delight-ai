@@ -1,0 +1,56 @@
+export const cloudflareCopy = {
+  en: {
+    gift: {
+      aiDetails: 'About your AI gift', sample: 'SAMPLE', aiPreview: 'Example illustration · not your result',
+      aiNotice: 'Cloudflare Workers AI will create a new illustration. This sample only shows the format. Without a photo, Caricature uses a fictional adult character, not your likeness.',
+      aiProcessing: 'Your product, language, occasion and wishes are sent to Cloudflare Workers AI. Names are added to the image on our server. Use a nickname and avoid sensitive information. Your generated image, including its text, is saved with this purchase.',
+      aiNameHint: 'A nickname is enough (up to 80 characters). It will appear in the saved PNG.',
+      aiShort: 'Sandbox checkout · Gifts with Cloudflare Workers AI',
+      aiSteps: 'Choose a caricature, greeting card or mini comic. Cloudflare creates the artwork; download your saved PNG.',
+      reviewTitle: 'Your gift needs a status review',
+    },
+    photo: {
+      cloudflarePurpose: 'A photo is optional. With your consent, Cloudflare uses it as a reference for a friendly caricature. You can continue without a photo and get a fictional adult character. Only share a photo you are entitled to use.',
+      cloudflareProcessing: 'After Create My Gift, our server removes metadata and reduces both sides below 512 px, then sends the cleaned photo to Cloudflare Workers AI. The original is processed only in memory and is not saved. The generated likeness remains in your saved gift. See the Privacy Policy for processing and deletion details.',
+      cloudflareConsent: 'I separately consent to sending my cleaned photo to Cloudflare Workers AI to generate this caricature. I understand that the generated likeness is stored in my gift. I can remove the photo before submitting.',
+    },
+    errors: {
+      AI_DISABLED: 'AI generation is currently switched off. Your gift right remains available.',
+      AI_NOT_CONFIGURED: 'AI generation is not configured yet. Your gift right is preserved.',
+      AI_BUSY: 'All generation slots are busy. Please try again shortly; your gift right is preserved.',
+      AI_SESSION_LIMIT: 'This browser session has reached its daily AI limit. Your gift right is preserved. Try again after 00:00 UTC.',
+      AI_DAILY_LIMIT: 'The daily AI budget has been reserved. Your gift right is preserved. Try again after 00:00 UTC.',
+      AI_PROVIDER_LIMIT: 'Cloudflare has reached a service limit. Please try later; your gift right is preserved.',
+      AI_REJECTED: 'Cloudflare did not accept this request. Your gift right remains available. Check your entries or contact the project owner.',
+      AI_REVIEW_REQUIRED: 'We could not confirm the AI result. Your gift right is held for review, not used up. Contact the project owner with the order number below. Refreshing only checks the status; it never sends another generation request.',
+      PHOTO_CLOUDFLARE_CONSENT_REQUIRED: 'Please separately consent to sending your photo to Cloudflare, or continue without a photo.',
+    },
+  },
+  de: {
+    gift: {
+      aiDetails: 'Über dein KI-Geschenk', sample: 'BEISPIEL', aiPreview: 'Beispielillustration · nicht dein Ergebnis',
+      aiNotice: 'Cloudflare Workers AI erstellt eine neue Illustration. Dieses Beispiel zeigt nur das Format. Ohne Foto verwendet die Karikatur eine erfundene erwachsene Figur, kein Abbild von dir.',
+      aiProcessing: 'Produkt, Sprache, Anlass und Wünsche werden an Cloudflare Workers AI gesendet. Namen ergänzt unser Server im Bild. Nutze einen Spitznamen und vermeide sensible Angaben. Dein erzeugtes Bild einschließlich der Texte wird bei diesem Kauf gespeichert.',
+      aiNameHint: 'Ein Spitzname genügt (bis zu 80 Zeichen). Er erscheint im gespeicherten PNG.',
+      aiShort: 'Sandbox-Kasse · Geschenke mit Cloudflare Workers AI',
+      aiSteps: 'Wähle eine Karikatur, Grußkarte oder einen Mini-Comic. Cloudflare erstellt das Motiv; lade dein gespeichertes PNG herunter.',
+      reviewTitle: 'Der Status deines Geschenks muss geprüft werden',
+    },
+    photo: {
+      cloudflarePurpose: 'Ein Foto ist freiwillig. Mit deiner Einwilligung nutzt Cloudflare es als Vorlage für eine freundliche Karikatur. Ohne Foto erhältst du eine erfundene erwachsene Figur. Teile nur ein Foto, das du verwenden darfst.',
+      cloudflareProcessing: 'Nach „Mein Geschenk erstellen“ entfernt unser Server Metadaten und verkleinert beide Seiten auf unter 512 px. Das bereinigte Foto wird an Cloudflare Workers AI gesendet. Das Original bleibt nur im Arbeitsspeicher und wird nicht gespeichert. Das erzeugte Abbild bleibt im gespeicherten Geschenk. Einzelheiten zu Verarbeitung und Löschung stehen in der Datenschutzerklärung.',
+      cloudflareConsent: 'Ich willige gesondert ein, mein bereinigtes Foto an Cloudflare Workers AI zur Erstellung dieser Karikatur zu senden. Mir ist bekannt, dass das erzeugte Abbild in meinem Geschenk gespeichert wird. Vor dem Absenden kann ich das Foto entfernen.',
+    },
+    errors: {
+      AI_DISABLED: 'Die KI-Generierung ist derzeit ausgeschaltet. Dein Geschenkanspruch bleibt verfügbar.',
+      AI_NOT_CONFIGURED: 'Die KI-Generierung ist noch nicht eingerichtet. Dein Geschenkanspruch bleibt erhalten.',
+      AI_BUSY: 'Alle Generierungsplätze sind belegt. Versuche es gleich erneut; dein Geschenkanspruch bleibt erhalten.',
+      AI_SESSION_LIMIT: 'Diese Browsersitzung hat ihr tägliches KI-Limit erreicht. Dein Geschenkanspruch bleibt erhalten. Versuche es nach 00:00 UTC erneut.',
+      AI_DAILY_LIMIT: 'Das tägliche KI-Budget ist reserviert. Dein Geschenkanspruch bleibt erhalten. Versuche es nach 00:00 UTC erneut.',
+      AI_PROVIDER_LIMIT: 'Cloudflare hat ein Dienstlimit erreicht. Versuche es später; dein Geschenkanspruch bleibt erhalten.',
+      AI_REJECTED: 'Cloudflare hat die Anfrage nicht angenommen. Dein Geschenkanspruch bleibt verfügbar. Prüfe deine Angaben oder kontaktiere den Projektbetreiber.',
+      AI_REVIEW_REQUIRED: 'Das KI-Ergebnis konnte nicht bestätigt werden. Dein Geschenkanspruch ist zur Prüfung reserviert und nicht verbraucht. Kontaktiere den Projektbetreiber mit der unten stehenden Bestellnummer. Aktualisieren prüft nur den Status und startet keine weitere Generierung.',
+      PHOTO_CLOUDFLARE_CONSENT_REQUIRED: 'Bitte willige gesondert in die Übermittlung deines Fotos an Cloudflare ein oder fahre ohne Foto fort.',
+    },
+  },
+};

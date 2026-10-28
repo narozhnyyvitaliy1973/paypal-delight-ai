@@ -107,7 +107,7 @@ test('unbranded stage-3C gifts survive restart and mixed old/new gifts are never
     const response = await next.get(`/orders/${fresh.id}/gift/download`);
     await assertBrandedPng(response.rawPayload, result.image.bytes, 'en');
   }
-  assert.equal(next.store.db.pragma('user_version', { simple: true }), 2);
+  assert.equal(next.store.db.pragma('user_version', { simple: true }), 4);
   assert.equal(count(next, 'gift_images'), 6); assert.equal(count(next, 'gift_entitlements'), 6);
 });
 
@@ -231,7 +231,7 @@ test('v2 restart preserves payments and all three saved modes, with one PNG per 
   await first.app.close();
   const next = await fixture(t, { path, cookie, giftProvider: { name: 'mock', generate: () => assert.fail('Saved gift must not be generated again') } });
   cleanup(t, path);
-  assert.equal(next.store.db.pragma('user_version', { simple: true }), 2);
+  assert.equal(next.store.db.pragma('user_version', { simple: true }), 4);
   assert.deepEqual(next.store.db.prepare("SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").all(), schema);
   assert.deepEqual(next.store.db.prepare('SELECT * FROM orders ORDER BY id').all(), payments);
   for (const saved of snapshots) {
@@ -285,7 +285,7 @@ test('version 1 migration preserves payment rows and existing gift entitlement I
   await first.app.close();
   const migrated = await fixture(t, { path, cookie: first.cookie });
   cleanup(t, path);
-  assert.equal(migrated.store.db.pragma('user_version', { simple: true }), 2);
+  assert.equal(migrated.store.db.pragma('user_version', { simple: true }), 4);
   assert.deepEqual(migrated.store.get(order.id), payment);
   assert.equal(migrated.store.gift(order.id).id, giftId);
   assert.equal((await create(migrated, order)).json().gift.status, 'COMPLETED');

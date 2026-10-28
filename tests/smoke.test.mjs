@@ -69,6 +69,7 @@ test("compiled backend and both frontend servers work over HTTP", async (t) => {
       DATABASE_PATH: join(dataDirectory, "orders.sqlite"),
       PAYPAL_ENVIRONMENT: "sandbox",
       AI_PROVIDER: "mock",
+      AI_ENABLED: "false",
       PAYPAL_CLIENT_ID: "",
       PAYPAL_CLIENT_SECRET: "",
     },

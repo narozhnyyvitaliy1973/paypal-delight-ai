@@ -7,6 +7,7 @@ const app = buildApp({
     redact: [
       "req.headers.cookie",
       "req.headers.authorization",
+      'req.headers["x-delight-lab-token"]',
       'res.headers["set-cookie"]',
     ],
   },

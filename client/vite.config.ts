@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import vue from '@vitejs/plugin-vue';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -11,8 +11,24 @@ export default defineConfig(({ mode }) => {
   const port = process.env.PORT ?? env.PORT ?? '8003';
   const proxyHost = host === '0.0.0.0' ? '127.0.0.1' : host === '::' ? '::1' : host;
   const authority = proxyHost.includes(':') ? `[${proxyHost}]` : proxyHost;
-  const proxy = {
-    '/api': { target: `http://${authority}:${port}` },
+  const labEnabled = (process.env.AI_LAB_ENABLED ?? env.AI_LAB_ENABLED) === 'true';
+  const labToken = process.env.AI_LAB_PROXY_TOKEN ?? env.AI_LAB_PROXY_TOKEN ?? '';
+  const loopbackAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+  const proxy: Record<string, ProxyOptions> = {
+    '/api': {
+      target: `http://${authority}:${port}`,
+      configure(proxyServer) {
+        proxyServer.on('proxyReq', (proxyRequest, request) => {
+          // The local proxy authenticates the lab; never send this token to the browser.
+          proxyRequest.removeHeader('X-Delight-Lab-Token');
+          if (labEnabled && /^[a-f0-9]{64}$/.test(labToken) &&
+              (proxyHost === 'localhost' || loopbackAddresses.has(proxyHost)) &&
+              loopbackAddresses.has(request.socket.remoteAddress ?? '')) {
+            proxyRequest.setHeader('X-Delight-Lab-Token', labToken);
+          }
+        });
+      },
+    },
   };
   const appOrigin = new URL(
     process.env.APP_ORIGIN ?? env.APP_ORIGIN ?? 'http://127.0.0.1:5173',
