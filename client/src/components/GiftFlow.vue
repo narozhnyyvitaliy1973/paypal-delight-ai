@@ -5,6 +5,7 @@ import { api, ApiError, type GiftView, type GiftInput, type GiftType } from '../
 import { errorKey } from '../i18n';
 import GiftPhotoInput from './GiftPhotoInput.vue';
 import AppIcon from './AppIcon.vue';
+import WaitingCompanion from './WaitingCompanion.vue';
 
 const props = defineProps<{ order: GiftView; productName: string; isDemo: boolean; provider?: string; aiEnabled?: boolean;
   lab?: boolean; transport?: { read: () => Promise<GiftView>; create: (input: GiftInput) => Promise<GiftView> } }>();
@@ -27,6 +28,13 @@ const generating = computed(() => submitting.value || props.order.gift?.status =
 const review = computed(() => props.order.gift?.status === 'REVIEW');
 const disabled = computed(() => !props.isDemo && props.aiEnabled === false);
 const flowElement = ref<HTMLElement>();
+watch(generating, async active => {
+  if (!active) return;
+  await nextTick();
+  if (generating.value) flowElement.value?.querySelector<HTMLElement>('.gift-progress')?.scrollIntoView({
+    block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  });
+}, { immediate: true });
 // Keep keyboard users at the next visible step when its triggering button disappears.
 watch([form, result, review], async () => {
   await nextTick();
@@ -170,7 +178,7 @@ async function create() {
             <div class="preview-heading"><span><AppIcon name="image" />{{ t('design.studioPreview') }}</span><span class="demo-badge">{{ isDemo ? 'DEMO' : t('gift.sample') }}</span></div>
             <div class="preview-canvas">
               <img v-if="form" :src="`/media/demo-${mode}.webp`" :alt="t(`gift.${modeKeys[mode]}Alt`)" width="600" height="600" />
-              <div v-if="generating" class="gift-progress" role="status" aria-live="polite" data-testid="gift-progress"><span class="gift-spinner" aria-hidden="true"><AppIcon /></span><strong>{{ t('gift.generating') }}</strong><p>{{ t('gift.wait') }}</p><div class="progress-dots" aria-hidden="true"><i></i><i></i><i></i></div></div>
+              <div v-if="generating" class="gift-progress" role="status" aria-live="polite" data-testid="gift-progress"><span class="gift-spinner" aria-hidden="true"><AppIcon /></span><strong>{{ t('gift.generating') }}</strong><p>{{ t('gift.wait') }}</p><WaitingCompanion /><div class="progress-dots" aria-hidden="true"><i></i><i></i><i></i></div></div>
             </div>
             <div class="preview-meta"><span>{{ t(isDemo ? 'design.studioMock' : 'gift.aiPreview') }}</span><span>{{ locale.toUpperCase() }} · PNG</span></div>
             <p class="preview-caption">{{ t(isDemo ? 'gift.mockNotice' : 'gift.aiNotice') }}</p>
