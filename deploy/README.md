@@ -23,7 +23,7 @@ ACME challenge, остальные запросы перенаправляютс
 
 - `/var/www/paypal-delight-ai/releases/<UTC timestamp>-<SHA>` — отдельные релизы.
 - `/var/www/paypal-delight-ai/current` — атомарно переключаемый symlink.
-- `/var/www/paypal-delight-ai/shared/delight.sqlite` — постоянная БД, режим 600;
+- `/var/www/paypal-delight-ai/shared/delight-stage5.sqlite` — текущая БД, режим 600;
   каталог shared имеет режим 700, владелец `paypal-delight`.
 - `/etc/paypal-delight-ai/runtime.env` — Sandbox-настройки, root:root 600.
 - `/etc/nginx/paypal-delight-ai.htpasswd` — только хеш пароля, root:www-data 640.
@@ -50,7 +50,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\publish.ps1
 
 Скрипт запускает typecheck и build, без тестовых наборов. Архив содержит только
 package manifests/lockfile, `client/dist` и `server/dist`; без .env, SQLite, Git и
-Windows node_modules. Доставка — SCP с проверкой SSH host key. На Linux выполняется
+Windows node_modules. Временный архив удаляется локально после публикации и на
+сервере после распаковки. Доставка — SCP с проверкой SSH host key. На Linux выполняется
 `npm ci --omit=dev`, проверяются native SQLite/Sharp. Stage 5 использует отдельную
 `shared/delight-stage5.sqlite`; прежняя `shared/delight.sqlite` не мигрируется.
 Переключается current и перезапускается **только** PayPal-сервис. На время активации
@@ -72,9 +73,9 @@ ssh -o StrictHostKeyChecking=yes root@91.99.101.189 /var/www/paypal-delight-ai/o
 
 Скрипт возвращает предыдущий релиз и проверяет health. На первом deployment предыдущего
 релиза ещё нет; неудачная первая активация останавливает только PayPal-сервис.
-Откат Stage 5 восстанавливает runtime и Nginx из `backups/before-<текущий релиз>`.
-Stage 4 снова открывает свою прежнюю БД; база Stage 5 остаётся на месте.
-Старые релизы и backups автоматически не удаляются.
+Откат восстанавливает runtime и Nginx из `backups/before-<текущий релиз>`.
+После очистки сохраняются текущий релиз, один предыдущий релиз и настройки для
+отката к нему. Старые релизы и backups автоматически не удаляются.
 
 ## Диагностика
 
@@ -108,4 +109,4 @@ Cloudflare API Token не попадает в аргументы процесс�
 Тестовые PNG, ошибки и расход хранятся отдельно от заказов; повторы одного ID идемпотентны.
 Новый тест после ошибки разрешён вручную без сброса израсходованного бюджета.
 
-Изменения подготовлены локально. До отдельного разрешения сервер не изменяется.
+Публикация и очистка сервера выполняются только по разрешению владельца.

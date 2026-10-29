@@ -1,6 +1,7 @@
 param([switch]$EnableCloudflareLab)
 $ErrorActionPreference = 'Stop'
 $deployRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$archive = $null
 function Invoke-Checked([string]$program, [string[]]$arguments) {
     & $program @arguments
     if ($LASTEXITCODE -ne 0) { throw "$program failed (exit $LASTEXITCODE)" }
@@ -24,10 +25,14 @@ try {
         Invoke-Checked 'ssh' @('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','root@91.99.101.189','chmod 700 /var/www/paypal-delight-ai/ops/stage-cloudflare.py /var/www/paypal-delight-ai/ops/activate-release.sh /var/www/paypal-delight-ai/ops/rollback.sh')
         Invoke-Checked 'node' @('deploy/prepare-cloudflare.mjs','--stage',$releaseId)
     }
-    New-Item -ItemType Directory -Path '.npm-cache' -Force | Out-Null
-    $archive = ".npm-cache/paypal-delight-$releaseId.tar.gz"
+    $archive = Join-Path ([IO.Path]::GetTempPath()) "paypal-delight-$releaseId.tar.gz"
     Invoke-Checked 'tar' @('-czf', $archive, 'package.json','package-lock.json','client/package.json','client/dist','server/package.json','server/dist')
     Invoke-Checked 'scp' @('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes',$archive,"root@91.99.101.189:/tmp/paypal-delight-$releaseId.tar.gz")
     Invoke-Checked 'ssh' @('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','root@91.99.101.189',"/var/www/paypal-delight-ai/ops/activate-release.sh $releaseId /tmp/paypal-delight-$releaseId.tar.gz")
     Write-Output "Published $releaseId. Verify the password-protected HTTPS site."
-} finally { Pop-Location }
+} finally {
+    Pop-Location
+    if ($archive -and (Test-Path -LiteralPath $archive)) {
+        Remove-Item -LiteralPath $archive -Force -ErrorAction Continue
+    }
+}

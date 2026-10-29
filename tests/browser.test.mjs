@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { MockGiftProvider } from '../server/dist/gifts/provider.js';
@@ -66,10 +68,11 @@ test(
     );
     const browser = await chromium.launch({ executablePath, headless: true });
     t.after(() => browser.close());
-    const screenshots = fileURLToPath(
-      new URL("../.npm-cache", import.meta.url),
-    );
-    mkdirSync(screenshots, { recursive: true });
+    const screenshots = mkdtempSync(join(tmpdir(), "delight-browser-"));
+    t.after(() => {
+      assert.equal(dirname(resolve(screenshots)), resolve(tmpdir()));
+      rmSync(screenshots, { recursive: true, force: true });
+    });
 
     async function pageFixture(t, scenario = "approve", options = {}) {
       const f = await fixture(t, options.fixture);

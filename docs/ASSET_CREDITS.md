@@ -17,4 +17,4 @@ All images are served locally. Sharp, already installed in the project, was used
 
 Public demo thumbnails contain no customer data. Actual gift previews and downloads continue to use the existing protected API and branded PNG; frontend thumbnails never replace saved customer results.
 
-The user supplied `docs/design-reference/ui-concept.png` as the approved UI composition reference on 26 October 2026. It is included in the local design review for comparison. Portraits, logos and other artwork from that montage are not extracted into application assets. The application retains the existing demo illustrations and uses its own sparkle symbol instead of the depicted PayPal-style logo.
+The project owner supplied the approved UI composition reference on 26 October 2026. Portraits, logos and other artwork from that montage were not extracted into application assets. The application retains the existing demo illustrations and uses its own sparkle symbol instead of the depicted PayPal-style logo.

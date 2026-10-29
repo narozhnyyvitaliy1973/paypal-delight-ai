@@ -10,10 +10,9 @@ Stage 5 добавляет отключённый по умолчанию Cloudf
 FLUX.2 klein 4B, локальные DE/EN надписи, согласие на фото и лимиты расходов.
 Интеграция проверяется с имитацией API. Первая реальная генерация требует
 настройки credentials и отдельного разрешения владельца.
-[Настройки, ограничения и процедура проверки](docs/STAGE5_CLOUDFLARE_REPORT.md).
 Закрытая страница `/ai-lab` позволяет исследовать все три режима без новых покупок;
 тесты не расходуют права на подарки. Общий бюджет — 50 попыток / 8000 расчётных
-Neurons в сутки. [Браузерные AI-тесты и безопасная публикация](docs/STAGE5_AI_LAB_REPORT.md).
+Neurons в сутки. Настройки описаны ниже, [порядок публикации — в deploy/README.md](deploy/README.md).
 
 Интерфейс выбирает DE/EN по языкам браузера (fallback EN). Переключатель в шапке
 сохраняет ручной выбор. `/legal` и `/privacy` содержат двуязычные черновики с явными
@@ -149,9 +148,6 @@ Live переключателя нет даже при `NODE_ENV=production`.
 - Сборка backend копирует PNG в `server/dist/assets/`; будущий релиз должен включать
   весь `server/dist`, сохраняя entrypoint `server/dist/index.js`.
 
-[Отчёт этапа 3A](docs/STAGE3A_REPORT.md), [отчёт этапа 3B](docs/STAGE3B_REPORT.md),
-[отчёт этапа 3C](docs/STAGE3C_REPORT.md).
-
 ## Как работает покупка
 
 1. `GET /api/store` возвращает три товара с серверными ценами EUR, публичную
@@ -257,8 +253,8 @@ npm.cmd run test:browser
 - Browser: `playwright-core` использует установленный Chrome/Edge/Chromium.
   При необходимости задайте `BROWSER_EXECUTABLE_PATH`. Скачивания браузера нет.
   `test:browser` требует сборки, проверяет интерфейс с симуляцией SDK v6 и PayPal API,
-  но с настоящим backend и SQLite. Скриншоты: `.npm-cache/store-desktop.png`,
-  `store-mobile.png`, `purchase-success.png`. Это не настоящая Sandbox-оплата.
+  но с настоящим backend и SQLite. Скриншоты сохраняются во временный каталог ОС
+  и удаляются после проверки. Это не настоящая Sandbox-оплата.
 
 Локальная проверка собранного frontend: поменяйте `APP_ORIGIN` на
 `http://127.0.0.1:4173`, затем в двух терминалах запустите `npm.cmd start` и

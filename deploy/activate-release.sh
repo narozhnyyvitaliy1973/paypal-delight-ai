@@ -25,6 +25,7 @@ with tarfile.open(sys.argv[1]) as archive:
 PY
 install -d -m 0755 -o deploy -g www-data "$RELEASE"
 tar -xzf "$ARCHIVE" -C "$RELEASE" --no-same-owner
+rm -f -- "$ARCHIVE"
 chown -R deploy:www-data "$RELEASE"
 install -d -m 0700 -o deploy -g deploy "$APP/build-cache"
 runuser -u deploy -- env npm_config_cache="$APP/build-cache" npm ci --omit=dev --no-audit --no-fund --prefix "$RELEASE"

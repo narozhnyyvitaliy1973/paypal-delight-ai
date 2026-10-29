@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -14,6 +16,11 @@ const token = 'a'.repeat(64);
 test('private AI lab in the browser, without purchases or real providers', { timeout: 180_000 }, async t => {
   const executablePath = process.env.BROWSER_EXECUTABLE_PATH ?? ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
   const browser = await chromium.launch({ executablePath, headless: true }); t.after(() => browser.close());
+  const screenshots = mkdtempSync(join(tmpdir(), 'delight-lab-browser-'));
+  t.after(() => {
+    assert.equal(dirname(resolve(screenshots)), resolve(tmpdir()));
+    rmSync(screenshots, { recursive: true, force: true });
+  });
   async function setup(t, options = {}, language = 'en', authorised = true) {
     const closes = [];
     const f = await fixture({ after: fn => closes.push(fn) }, { ...options, settings: { ...options.settings, lab: { enabled: true, proxyToken: token } } });
@@ -59,7 +66,7 @@ test('private AI lab in the browser, without purchases or real providers', { tim
       assert.deepEqual(f.paymentRequests, []); assert.deepEqual(f.errors, []);
       assert.match(await f.page.locator('.saved-title').innerText(), language === 'de' ? /Testhistorie/ : /test history/);
       assert.match(await f.page.locator('.footer-bottom').innerText(), provider === 'mock' ? /DEMO/ : /Cloudflare Workers AI/);
-      await f.page.screenshot({ path: `.npm-cache/stage5-lab-${provider}-${language}.png`, fullPage: true, animations: 'disabled' });
+      await f.page.screenshot({ path: `${screenshots}/stage5-lab-${provider}-${language}.png`, fullPage: true, animations: 'disabled' });
     });
   }
   await t.test('uncertain test allows a new manual test, while reload never dispatches', async t => {
