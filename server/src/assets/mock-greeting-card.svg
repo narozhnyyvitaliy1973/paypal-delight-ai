@@ -3,22 +3,20 @@
   <rect x="32" y="32" width="836" height="1036" rx="32" fill="#fffcf4" stroke="#d7cbb3" stroke-width="2"/>
   <rect x="52" y="52" width="796" height="996" rx="22" fill="none" stroke="#d7cbb3" stroke-dasharray="3 9"/>
   <g font-family="Arial, sans-serif" text-anchor="middle" fill="#284e40">
-    <text x="450" y="136" font-size="18" letter-spacing="5">PAYPAL DELIGHT AI</text>
+    <text x="450" y="136" font-size="18" letter-spacing="5">DELIGHT AI</text>
     <text x="450" y="260" font-family="Georgia, serif" font-size="96">For you.</text>
     <text x="450" y="324" font-family="Georgia, serif" font-style="italic" font-size="48" fill="#b45f43">Für dich.</text>
     <text x="450" y="396" font-size="20" letter-spacing="2">A LITTLE REASON TO CELEBRATE</text>
     <text x="450" y="429" font-size="18">Ein kleiner Grund zum Feiern.</text>
   </g>
   <ellipse cx="450" cy="855" rx="247" ry="28" fill="#e9dfc9"/>
-  <!-- A mug and a present, drawn for this static demo. -->
+  <!-- An art puzzle and a present, drawn for this static demo. -->
   <g stroke="#284e40" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M559 618h61c86 0 83 125 8 126h-47" fill="none" stroke-width="22"/>
-    <path d="M374 590h218v189c0 87-218 87-218 0Z" fill="#e9b34e"/>
-    <ellipse cx="483" cy="590" rx="109" ry="25" fill="#fff7db"/>
-    <ellipse cx="483" cy="589" rx="85" ry="13" fill="#9c6445" stroke="none"/>
-    <path d="M455 548c-30-26 25-36 5-65M505 544c-30-26 25-36 5-65" fill="none" stroke="#c7b28f" stroke-width="5"/>
-    <path d="M432 683q10-14 20 0m59 0q10-14 20 0m-65 37q18 19 37 0" fill="none"/>
-    <circle cx="426" cy="710" r="12" fill="#e79973" stroke="none"/><circle cx="539" cy="710" r="12" fill="#e79973" stroke="none"/>
+    <rect x="366" y="528" width="262" height="295" rx="8" fill="#fff7db"/>
+    <rect x="381" y="544" width="232" height="246" fill="#234d78"/>
+    <path d="M388 646q67-91 139-12t77-52m-216 115q86-65 142-4t74-16" stroke="#8dbbb6" stroke-width="12" fill="none"/>
+    <g fill="#efcb6d" stroke="none"><circle cx="427" cy="585" r="19"/><circle cx="551" cy="593" r="26"/><circle cx="494" cy="565" r="10"/></g>
+    <path d="M459 544v100q-27-14-27 7t27 7v132m76-246v148q27-14 27 7t-27 7v84M381 651h123q-14 27 7 27t7-27h95" stroke="#fff8" stroke-width="3" fill="none"/>
     <rect x="216" y="711" width="191" height="139" rx="8" fill="#e79973"/>
     <rect x="204" y="686" width="215" height="38" rx="7" fill="#f5b494"/>
     <path d="M301 687v163" stroke="#fff8e5" stroke-width="28"/>

@@ -153,7 +153,7 @@ export class PayPalClient implements PayPalGateway {
         payment_source: {
           paypal: {
             experience_context: {
-              brand_name: "PayPal Delight AI",
+              brand_name: "Museum Puzzles",
               shipping_preference: "NO_SHIPPING",
               user_action: "PAY_NOW",
               payment_method_preference: "IMMEDIATE_PAYMENT_REQUIRED",

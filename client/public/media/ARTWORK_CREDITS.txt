@@ -1,0 +1,42 @@
+MUSEUM PUZZLES — ARTWORK SOURCES / BILDQUELLEN
+Checked: 2026-10-30
+
+The puzzle boxes and interlocking-piece overlays are original illustrative
+layouts for this Sandbox demonstration, not photographs of commercial puzzles.
+Die Puzzleverpackungen und Schnittlinien sind eigene illustrative Entwürfe
+für diese Sandbox-Demo, keine Fotos fremder kommerzieller Puzzles.
+
+starry-night.webp
+Vincent van Gogh, The Starry Night, 1889.
+Faithful digital reproduction: Google Art Project / Wikimedia Commons.
+Public Domain Mark; PD-Art. Original artwork and reproduction marked public domain.
+https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg
+Downloaded the 1280px reproduction and converted to WebP (no generative alteration).
+
+great-wave.webp
+Katsushika Hokusai, Under the Wave off Kanagawa (The Great Wave), ca. 1830–32.
+The Metropolitan Museum of Art, JP1847.
+H. O. Havemeyer Collection, Bequest of Mrs. H. O. Havemeyer, 1929.
+Public Domain / The Met Open Access (CC0).
+https://www.metmuseum.org/art/collection/search/45434
+https://www.metmuseum.org/about-the-met/policies-and-documents/open-access
+Image: https://collectionapi.metmuseum.org/api/collection/v1/iiif/45434/134438/main-image
+Converted to WebP.
+
+water-lilies.webp
+Claude Monet, Water Lilies, 1906.
+Art Institute of Chicago, Mr. and Mrs. Martin A. Ryerson Collection, 1933.1157.
+Public-domain artwork; reproduction released under CC0 1.0.
+https://www.artic.edu/artworks/16568/water-lilies
+https://commons.wikimedia.org/wiki/File:Claude_Monet_-_Water_Lilies_-_1933.1157_-_Art_Institute_of_Chicago.jpg
+Downloaded the 1280px Wikimedia reproduction and converted to WebP.
+
+Public Domain Mark: https://creativecommons.org/publicdomain/mark/1.0/
+CC0: https://creativecommons.org/publicdomain/zero/1.0/
+
+Artwork is cropped within the illustrative packaging. Artists and museums
+do not endorse this demonstration. Existing DEMO gift drawings are original
+SVG illustrations, not AI-generated examples or reproductions of these works.
+Die Motive werden in der illustrativen Verpackung beschnitten. Es besteht
+keine behauptete Unterstützung durch die Künstler oder Museen. Die DEMO-
+Geschenkbilder sind eigene SVG-Illustrationen, keine KI-Ergebnisse.

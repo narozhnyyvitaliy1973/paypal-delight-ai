@@ -50,7 +50,7 @@ async function checkPage(origin) {
   const response = await fetch(origin, { signal: AbortSignal.timeout(5000) });
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<title>PayPal Delight AI<\/title>/);
+  assert.match(html, /<title>Museum Puzzles · Delight AI<\/title>/);
   return html;
 }
 

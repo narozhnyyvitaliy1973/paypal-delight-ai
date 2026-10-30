@@ -16,12 +16,14 @@
   <ellipse cx="300" cy="351" rx="26" ry="16" fill="#eaa08b"/><ellipse cx="458" cy="351" rx="26" ry="16" fill="#eaa08b"/>
   <path d="M321 379q59 72 120 0z" fill="#844b40"/><path d="M332 383h97q-49 33-97 0" fill="#fffaf1"/>
   <path d="M254 547q30 65 96 61m138-64q-20 63-83 62" stroke="#efba94" stroke-width="37" stroke-linecap="round" fill="none"/>
-  <path d="M444 514h25c48 0 49 66 0 66h-22" fill="none" stroke="#cf7754" stroke-width="19"/>
-  <path d="M342 493h106v104q-54 42-106 0z" fill="#e79973"/>
-  <ellipse cx="395" cy="493" rx="53" ry="14" fill="#f5c2a0"/>
-  <path d="M370 546q24 31 49 0" stroke="#fff4db" stroke-width="7" stroke-linecap="round" fill="none"/>
-  <circle cx="375" cy="530" r="4" fill="#fff4db"/><circle cx="413" cy="530" r="4" fill="#fff4db"/>
-  <path d="M376 468q-15-18 2-32m28 27q-13-18 3-32" stroke="#fffaf5" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <!-- An original illustrated art-puzzle box, not a commercial product photograph. -->
+  <g transform="rotate(-8 395 550)">
+    <rect x="300" y="480" width="192" height="151" rx="5" fill="#e4d9b8" stroke="#284e40" stroke-width="5"/>
+    <rect x="310" y="488" width="172" height="124" fill="#234d78"/>
+    <path d="M312 554q50-70 90-15t78-21m-168 57q65-54 106-5t62-11" fill="none" stroke="#83b5ba" stroke-width="8"/>
+    <g fill="#efcb6d"><circle cx="340" cy="513" r="13"/><circle cx="447" cy="520" r="18"/><circle cx="396" cy="505" r="7"/></g>
+    <path d="M370 488v42q-20-12-20 5t20 5v72m60-124v83q20-12 20 5t-20 5v31M310 551h80q-12 20 5 20t5-20h82" stroke="#fff9" stroke-width="2" fill="none"/>
+  </g>
   <rect x="274" y="690" width="220" height="46" rx="23" fill="#284e40"/>
   <text x="384" y="720" text-anchor="middle" font-family="sans-serif" font-size="23" font-weight="bold" fill="#fffaf1">DEMO</text>
 </svg>

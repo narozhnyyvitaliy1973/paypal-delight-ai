@@ -129,7 +129,7 @@ test('photo consent, EXIF removal and provider inputs; photos/wishes never enter
   const result = await create(f, order, { ...body, language: 'de', wishes: 'PRIVATE-WISH-MARKER', photo: { ...photo, consent: true } });
   assert.equal(result.statusCode, 200, result.body);
   assert.equal(observed.language, 'de'); assert.equal(observed.wishes, 'PRIVATE-WISH-MARKER');
-  assert.deepEqual(observed.product, { id: 'daybreak-mug', name: 'Daybreak Mug' });
+  assert.deepEqual(observed.product, { id: 'starry-night-puzzle', name: 'Starry Night Puzzle' });
   assert.ok(cleaned.every(byte => byte === 0));
   assert.equal(result.json().gift.result.language, 'de');
   const persisted = JSON.stringify(f.store.db.prepare('SELECT * FROM gift_entitlements').all());
@@ -323,7 +323,7 @@ for (const type of Object.keys(inputs)) {
     } } });
     const asset = await readFile(new URL(`../dist/assets/mock-${type}.png`, import.meta.url));
     for (const language of ['en', 'de']) {
-      const order = await paid(f, language === 'de' ? 'weekend-tote' : 'daybreak-mug');
+      const order = await paid(f, language === 'de' ? 'great-wave-puzzle' : 'starry-night-puzzle');
       const payment = f.store.get(order.id);
       const input = { ...inputs[type], language, wishes: 'PRIVATE-WISH' };
       const originalFetch = globalThis.fetch;

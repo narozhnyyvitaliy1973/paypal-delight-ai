@@ -40,7 +40,7 @@ test("create uses server product snapshot and rejects injected price/status/unkn
     assert.equal(
       (
         await f.send("/orders", {
-          productId: "daybreak-mug",
+          productId: "starry-night-puzzle",
           requestId: randomUUID(),
           ...extra,
         })
@@ -55,13 +55,13 @@ test("create uses server product snapshot and rejects injected price/status/unkn
   );
   assert.equal(f.sandbox.orders.size, 0);
   const order = await f.create();
-  assert.equal(order.amountMinor, 1800);
+  assert.equal(order.amountMinor, 2990);
   assert.equal(order.currency, "EUR");
   const payload = JSON.parse(
     f.sandbox.calls.find((call) => call.path === "/v2/checkout/orders").body,
   );
-  assert.equal(payload.purchase_units[0].amount.value, "18.00");
-  assert.equal(payload.purchase_units[0].items[0].sku, "daybreak-mug");
+  assert.equal(payload.purchase_units[0].amount.value, "29.90");
+  assert.equal(payload.purchase_units[0].items[0].sku, "starry-night-puzzle");
   assert.equal(payload.purchase_units[0].custom_id, order.id);
   assert.equal(
     payload.payment_source.paypal.experience_context.shipping_preference,
@@ -73,10 +73,10 @@ test("create uses server product snapshot and rejects injected price/status/unkn
 test("approved capture persists verified IDs and one gift; all repeat processing is idempotent", async (t) => {
   const f = await fixture(t);
   const key = randomUUID();
-  const order = await f.create("daybreak-mug", key);
-  assert.equal((await f.create("daybreak-mug", key)).id, order.id);
+  const order = await f.create("starry-night-puzzle", key);
+  assert.equal((await f.create("starry-night-puzzle", key)).id, order.id);
   assert.equal(
-    (await f.send("/orders", { productId: "weekend-tote", requestId: key }))
+    (await f.send("/orders", { productId: "great-wave-puzzle", requestId: key }))
       .statusCode,
     409,
   );
@@ -170,11 +170,11 @@ test("lost create response retries same PayPal request ID and same local order",
   const key = randomUUID();
   f.sandbox.loseCreate = true;
   assert.equal(
-    (await f.send("/orders", { productId: "daybreak-mug", requestId: key }))
+    (await f.send("/orders", { productId: "starry-night-puzzle", requestId: key }))
       .statusCode,
     502,
   );
-  const created = await f.create("daybreak-mug", key);
+  const created = await f.create("starry-night-puzzle", key);
   assert.equal(f.sandbox.orders.size, 1);
   assert.equal(f.store.db.prepare("SELECT COUNT(*) n FROM orders").get().n, 1);
   assert.equal(created.paypalOrderId, [...f.sandbox.orders.keys()][0]);
@@ -189,10 +189,10 @@ test("ambiguous create is never replayed after the bounded retry window", async 
   const f = await fixture(t);
   const key = randomUUID();
   f.sandbox.loseCreate = true;
-  await f.send("/orders", { productId: "daybreak-mug", requestId: key });
+  await f.send("/orders", { productId: "starry-night-puzzle", requestId: key });
   f.store.db.prepare("UPDATE orders SET created_at = 0").run();
   const result = await f.send("/orders", {
-    productId: "daybreak-mug",
+    productId: "starry-night-puzzle",
     requestId: key,
   });
   assert.equal(result.json().code, "ORDER_EXPIRED");
@@ -442,7 +442,7 @@ for (const [name, mutate] of Object.entries(mutations)) {
 test("gift and completed state roll back together on a duplicate capture ID", async (t) => {
   const f = await fixture(t);
   const one = await f.create();
-  const two = await f.create("weekend-tote");
+  const two = await f.create("great-wave-puzzle");
   f.store.complete(one.id, "CAPTURE0000001");
   assert.throws(() => f.store.complete(two.id, "CAPTURE0000001"), /UNIQUE/);
   assert.equal(f.store.get(two.id).status, "CREATED");
@@ -462,7 +462,7 @@ test("OAuth access token stays server-side, is cached, and refreshes on one 401"
   const f = await fixture(t);
   f.sandbox.unauthorizedOnce = true;
   const first = await f.create();
-  await f.create("weekend-tote");
+  await f.create("great-wave-puzzle");
   assert.equal(
     f.sandbox.calls.filter((c) => c.path === "/v1/oauth2/token").length,
     2,
@@ -480,7 +480,7 @@ test("unconfigured checkout is explicit and does not call PayPal", async (t) => 
   assert.equal(
     (
       await f.send("/orders", {
-        productId: "daybreak-mug",
+        productId: "starry-night-puzzle",
         requestId: randomUUID(),
       })
     ).statusCode,

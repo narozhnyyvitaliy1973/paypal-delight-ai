@@ -166,7 +166,7 @@ export async function fixture(t, options = {}) {
   const get = (path, overrides = {}) =>
     app.inject({ url: `/api${path}`, headers: { cookie }, ...overrides });
   const create = async (
-    productId = "daybreak-mug",
+    productId = "starry-night-puzzle",
     requestId = randomUUID(),
   ) => {
     const result = await send("/orders", { productId, requestId });

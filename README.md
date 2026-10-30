@@ -1,4 +1,4 @@
-# PayPal Delight AI
+# Museum Puzzles · Delight AI
 
 Demo Store для PayPal AI Hackathon 2026: покупка через PayPal Sandbox открывает право
 на один персональный AI-подарок. Реализованы **этап 2 — Sandbox Checkout**,

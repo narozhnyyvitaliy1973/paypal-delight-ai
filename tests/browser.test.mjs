@@ -161,7 +161,7 @@ test(
         await success(f.page).waitFor();
         assert.match(
           await f.page.locator(".celebration-copy").textContent(),
-          /Weekend Tote/,
+          /The Great Wave Puzzle/,
         );
         assert.equal(
           await f.page.locator(".gift-options button:disabled").count(),
@@ -303,16 +303,16 @@ test(
       const language = f.page.getByTestId('language-switch');
       assert.equal(await f.page.locator('html').getAttribute('lang'), 'de');
       assert.equal(await f.page.evaluate(() => window.testSdkLocale), 'de-DE');
-      await f.page.getByRole('heading', { name: 'Morgensonne-Tasse' }).waitFor();
+      await f.page.getByRole('heading', { name: 'Sternennacht-Puzzle' }).waitFor();
       await f.page.getByRole('heading', { name: 'Mit PayPal bezahlen' }).waitFor();
-      assert.match(await f.page.locator('.checkout-total').innerText(), /18,00/);
+      assert.match(await f.page.locator('.checkout-total').innerText(), /29,90/);
       await f.page.setViewportSize({ width: 390, height: 844 });
       assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await f.page.screenshot({ path: `${screenshots}/store-de-mobile.png`, fullPage: true });
       await f.page.setViewportSize({ width: 1360, height: 1000 });
       await pay(f.page);
       await f.page.getByRole('heading', { name: 'Zahlung erfolgreich!' }).waitFor();
-      assert.match(await f.page.locator('.celebration-copy').textContent(), /Morgensonne-Tasse/);
+      assert.match(await f.page.locator('.celebration-copy').textContent(), /Sternennacht-Puzzle/);
       assert.equal(await f.page.locator('.gift-options button:disabled').count(), 0);
       await f.page.getByText('Dein persönliches KI-Geschenk ist verfügbar.', { exact: true }).waitFor();
       await f.page.screenshot({ path: `${screenshots}/celebrate-de.png`, fullPage: true });
@@ -327,7 +327,7 @@ test(
       await language.selectOption('de');
       await f.page.getByRole('heading', { name: 'Datenschutzerklärung', exact: true }).waitFor();
       await f.page.getByRole('link', { name: 'Zurück zum Shop', exact: true }).click();
-      await f.page.getByRole('heading', { name: 'Morgensonne-Tasse' }).waitFor();
+      await f.page.getByRole('heading', { name: 'Sternennacht-Puzzle' }).waitFor();
       // The store stays open for a new purchase; earlier paid orders have explicit links.
       await f.page.getByRole('link', { name: 'Zurück zu deinem letzten Geschenk' }).click();
       await f.page.getByRole('heading', { name: 'Zahlung erfolgreich!' }).waitFor();
@@ -365,7 +365,7 @@ test(
     await t.test('unsupported browser language falls back to English', async t => {
       const f = await pageFixture(t, 'approve', { locale: 'fr-FR' });
       assert.equal(await f.page.locator('html').getAttribute('lang'), 'en');
-      await f.page.getByRole('heading', { name: 'Daybreak Mug' }).waitFor();
+      await f.page.getByRole('heading', { name: 'Starry Night Puzzle' }).waitFor();
     });
 
     for (const scenario of ['cancel', 'error', 'declined', 'pending']) {
@@ -403,7 +403,7 @@ test(
       const f = await pageFixture(t, 'approve', { fixture: { giftProvider: { name: 'mock', generate: async input => { calls++; await gate; return mock.generate(input); } } } });
       await pay(f.page); await success(f.page).waitFor();
       await f.page.getByTestId('choose-caricature').click();
-      assert.equal(await f.page.getByLabel('Your purchased product').inputValue(), 'Daybreak Mug');
+      assert.equal(await f.page.getByLabel('Your purchased product').inputValue(), 'Starry Night Puzzle');
       assert.equal(await f.page.getByRole('checkbox').isChecked(), false);
       assert.equal(await f.page.locator('input[type=file]').isDisabled(), true);
       await f.page.getByLabel('Your wishes (optional)').fill('A bright morning');
@@ -587,7 +587,7 @@ test(
           release(); await f.page.getByTestId('gift-result').waitFor();
           assert.equal(observed.type, mode); assert.equal(observed.language, language);
           assert.equal(observed.wishes, 'A tiny adventure');
-          assert.deepEqual(observed.product, { id: 'daybreak-mug', name: 'Daybreak Mug' });
+          assert.deepEqual(observed.product, { id: 'starry-night-puzzle', name: 'Starry Night Puzzle' });
           assert.equal(observed.photo, undefined);
           assert.equal(observed[card ? 'recipientName' : 'characterName'], 'Alex');
           if (card) assert.equal(observed.occasion, 'Birthday');
@@ -634,7 +634,7 @@ test(
         const id = new URL(f.page.url()).searchParams.get('order');
         const input = { type, language:'en', wishes:'', recipientName: type === 'greeting-card' ? 'Demo' : undefined,
           occasion: type === 'greeting-card' ? 'Demo' : undefined, characterName: type === 'mini-comic' ? 'Demo' : undefined,
-          product: { id:'daybreak-mug', name:'Daybreak Mug' } };
+          product: { id:'starry-night-puzzle', name:'Starry Night Puzzle' } };
         const original = await mock.generate(input);
         saveLegacyGift(f.store, id, original);
         await f.page.reload(); await f.page.getByTestId('gift-result').waitFor();

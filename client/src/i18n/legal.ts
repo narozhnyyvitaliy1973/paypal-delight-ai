@@ -9,7 +9,7 @@ export const legalCopy: Record<'en' | 'de', Documents> = {
         { title: 'Service provider', text: ['[OWNER NAME / ORGANISATION — REQUIRED BEFORE PUBLIC DEPLOYMENT]', '[POSTAL ADDRESS, POSTCODE, CITY, COUNTRY — REQUIRED BEFORE PUBLIC DEPLOYMENT]'] },
         { title: 'Contact', text: ['[CONTACT EMAIL — REQUIRED BEFORE PUBLIC DEPLOYMENT]', '[ADDITIONAL DIRECT CONTACT METHOD — TO BE COMPLETED IF REQUIRED]'] },
         { title: 'Further particulars, where applicable', text: ['[LEGAL FORM, AUTHORISED REPRESENTATIVE, REGISTER / REGISTRATION NUMBER, VAT OR BUSINESS IDENTIFICATION NUMBER — CHECK APPLICABILITY AND COMPLETE BEFORE PUBLIC DEPLOYMENT]', '[SUPERVISORY AUTHORITY / REGULATED PROFESSION DETAILS — CHECK APPLICABILITY]'] },
-        { title: 'About this project', text: ["PayPal Delight AI is a hackathon demonstration using PayPal Sandbox test funds; no physical goods are supplied. Gifts use either clearly marked static DEMO illustrations or, when enabled by the operator, Cloudflare Workers AI. OpenAI is not connected.","PayPal is a third-party payment provider. This demonstration does not claim to be an official PayPal service."] },
+        { title: 'About this project', text: ["Museum Puzzles with gifts by Delight AI is a hackathon demonstration using PayPal Sandbox test funds; no physical goods are supplied. Gifts use either clearly marked static DEMO illustrations or, when enabled by the operator, Cloudflare Workers AI. OpenAI is not connected.","PayPal is a third-party payment provider. This demonstration does not claim to be an official PayPal service."] },
       ],
     },
     privacy: {
@@ -37,7 +37,7 @@ export const legalCopy: Record<'en' | 'de', Documents> = {
         { title: 'Diensteanbieter', text: ['[NAME / ORGANISATION DES BETREIBERS — VOR ÖFFENTLICHER BEREITSTELLUNG AUSFÜLLEN]', '[POSTANSCHRIFT, POSTLEITZAHL, ORT, LAND — VOR ÖFFENTLICHER BEREITSTELLUNG AUSFÜLLEN]'] },
         { title: 'Kontakt', text: ['[KONTAKT-E-MAIL — VOR ÖFFENTLICHER BEREITSTELLUNG AUSFÜLLEN]', '[WEITERE UNMITTELBARE KONTAKTMÖGLICHKEIT — SOWEIT ERFORDERLICH ERGÄNZEN]'] },
         { title: 'Weitere Angaben, soweit zutreffend', text: ['[RECHTSFORM, VERTRETUNGSBERECHTIGTE PERSON, REGISTER / REGISTERNUMMER, UMSATZSTEUER- ODER WIRTSCHAFTS-IDENTIFIKATIONSNUMMER — ANWENDBARKEIT PRÜFEN UND VOR ÖFFENTLICHER BEREITSTELLUNG ERGÄNZEN]', '[AUFSICHTSBEHÖRDE / ANGABEN ZU REGLEMENTIERTEN BERUFEN — ANWENDBARKEIT PRÜFEN]'] },
-        { title: 'Über das Projekt', text: ["PayPal Delight AI ist eine Hackathon-Demonstration mit PayPal-Sandbox-Testguthaben; es werden keine Waren geliefert. Geschenke sind entweder klar gekennzeichnete statische DEMO-Bilder oder werden nach Aktivierung durch den Betreiber mit Cloudflare Workers AI erstellt. OpenAI ist nicht angeschlossen.","PayPal ist ein externer Zahlungsanbieter. Diese Demonstration beansprucht nicht, ein offizieller PayPal-Dienst zu sein."] },
+        { title: 'Über das Projekt', text: ["Museum Puzzles mit Geschenken von Delight AI ist eine Hackathon-Demonstration mit PayPal-Sandbox-Testguthaben; es werden keine Waren geliefert. Geschenke sind entweder klar gekennzeichnete statische DEMO-Bilder oder werden nach Aktivierung durch den Betreiber mit Cloudflare Workers AI erstellt. OpenAI ist nicht angeschlossen.","PayPal ist ein externer Zahlungsanbieter. Diese Demonstration beansprucht nicht, ein offizieller PayPal-Dienst zu sein."] },
       ],
     },
     privacy: {

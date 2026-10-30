@@ -7,7 +7,7 @@ import { withPreparedPhoto, PHOTO_MAX_BYTES } from '../dist/gifts/photo.js';
 import { readSettings } from '../dist/config.js';
 import { fixture } from './helpers.mjs';
 
-const request = { type: 'caricature', product: { id: 'daybreak-mug', name: 'Daybreak Mug' }, language: 'en', wishes: 'A sunny morning' };
+const request = { type: 'caricature', product: { id: 'starry-night-puzzle', name: 'Starry Night Puzzle' }, language: 'en', wishes: 'A sunny morning' };
 const image = (format = 'png') => sharp({ create: { width: 80, height: 40, channels: 3, background: '#e79973' } }).toFormat(format).toBuffer();
 
 test('mock is the default, requires no credentials, returns the real local PNG and discloses the demo', async () => {
@@ -24,7 +24,7 @@ test('mock is the default, requires no credentials, returns the real local PNG a
     assert.deepEqual(result.image.bytes, await readFile(new URL('../dist/assets/mock-caricature.png', import.meta.url)));
     const metadata = await sharp(result.image.bytes).metadata();
     assert.equal(metadata.format, 'png'); assert.equal(metadata.width, 768);
-    const german = await provider.generate({ ...request, language: 'de', wishes: 'Ein anderer Wunsch', product: { id: 'weekend-tote', name: 'Weekend Tote' } });
+    const german = await provider.generate({ ...request, language: 'de', wishes: 'Ein anderer Wunsch', product: { id: 'great-wave-puzzle', name: 'The Great Wave Puzzle' } });
     assert.equal(german.language, 'de'); assert.match(german.text, /Demobild/);
     assert.deepEqual(german.image.bytes, result.image.bytes);
     assert.throws(() => createGiftProvider('openai'), /not implemented/);

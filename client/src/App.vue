@@ -386,7 +386,7 @@ onMounted(async () => {
   <a class="skip-link" href="#main-content">{{ t('design.skip') }}</a>
   <div class="page-shell">
     <header class="site-header">
-      <a href="/" class="brand"><span class="brand-mark"><AppIcon /></span><span>PayPal Delight <b>AI</b></span></a>
+      <a href="/" class="brand"><span class="brand-mark"><AppIcon /></span><span>Museum Puzzles</span></a>
       <nav class="main-nav" :aria-label="t('design.navigation')">
         <a :href="celebration || legalPage || labPage ? '/#collection' : '#collection'">{{ t('design.collection') }}</a>
         <a :href="celebration || legalPage || labPage ? '/#how-it-works' : '#how-it-works'">{{ t('design.how') }}</a>
@@ -425,7 +425,7 @@ onMounted(async () => {
           <ul><li v-for="purchase in purchases" :key="purchase.id"><a :href="`/?order=${purchase.id}`" :data-testid="`purchase-${purchase.id}`"><ProductPhoto :id="purchase.product.id" /><div><strong>{{ productName(purchase.product) }}</strong><span>{{ purchase.gift?.status === 'COMPLETED' ? t('gift.historyReady') : purchase.gift?.status === 'GENERATING' ? t('gift.generating') : purchase.gift?.status === 'REVIEW' ? t('gift.reviewTitle') : t('gift.historyAvailable') }}</span><small>{{ t('celebrate.order') }} {{ purchase.id.slice(0, 8) }} · {{ formatMoney(purchase.amountMinor, purchase.currency) }}<template v-if="purchase.gift?.result"> · {{ t(purchase.gift.result.type === 'caricature' ? 'gift.caricature' : purchase.gift.result.type === 'greeting-card' ? 'gift.greeting' : 'gift.comic') }}</template></small></div><AppIcon name="arrow" /></a></li></ul>
         </details>
         <section class="hero">
-          <div class="hero-photo" aria-hidden="true"><ProductPhoto kind="mug" eager /></div>
+          <div class="hero-photo" aria-hidden="true"><ProductPhoto kind="starry-night" eager /></div>
           <div class="hero-copy">
             <h1>{{ t('design.heroTitle') }} <em>{{ t('design.heroAccent') }}</em></h1>
             <p class="hero-description">{{ t('design.heroDescription') }}</p>
@@ -441,7 +441,7 @@ onMounted(async () => {
             <div class="art-panel" :class="product.color"><span class="product-index">0{{ index + 1 }}</span><span class="gift-pill"><AppIcon name="gift" />{{ t('design.included') }}</span><ProductPhoto :kind="product.art" :alt="productName(product)" /></div>
             <div class="product-body"><p class="product-category eyebrow">{{ t(`design.categories.${product.art}`) }}</p><div class="product-heading"><h3>{{ productName(product) }}</h3><span class="price">{{ formatMoney(product.amountMinor, product.currency) }}</span></div><p class="product-description">{{ productDescription(product) }}</p><button class="choose-button" :class="{ chosen: selected?.id === product.id }" :disabled="busy || Boolean(paymentUncertain) || Boolean(order && !terminal)" @click="selectProduct(product)">{{ selected?.id === product.id ? t('store.selected') : t('store.choose') }}<AppIcon :name="selected?.id === product.id ? 'check' : 'arrow'" /></button></div>
           </article></div>
-          <p class="photo-credit-note">{{ t('design.photoNote') }}</p>
+          <p class="photo-credit-note">{{ t('design.photoNote') }} <a href="/media/ARTWORK_CREDITS.txt" target="_blank" rel="noopener">{{ t('design.artCredits') }}</a></p>
         </section>
         <section
           v-if="selected && store"
@@ -541,6 +541,6 @@ onMounted(async () => {
         <section id="how-it-works" class="how-section" :aria-label="t('steps.label')"><div class="section-heading"><div><p class="eyebrow">{{ t('design.how') }}</p><h2>{{ t('design.stepsTitle') }}</h2></div><AppIcon name="spark" /></div><div class="how-it-works"><div><span class="step-icon"><AppIcon name="bag" /></span><p class="eyebrow">{{ t('design.stepShop') }}</p><h3>{{ t('steps.first') }}</h3><p>{{ t('steps.firstText') }}</p></div><div><span class="step-icon"><AppIcon name="shield" /></span><p class="eyebrow">{{ t('design.stepPay') }}</p><h3>{{ t('steps.second') }}</h3><p>{{ t('steps.secondText') }}</p></div><div><span class="step-icon"><AppIcon name="gift" /></span><p class="eyebrow">{{ t('design.stepGift') }}</p><h3>{{ t('steps.third') }}</h3><p>{{ t(store?.gifts.isDemo === false ? 'gift.aiSteps' : 'steps.thirdText') }}</p></div></div></section>
       </template>
     </main>
-    <footer><div class="footer-top"><div><span class="footer-brand">{{ t('footer.brand') }}<AppIcon /></span><p>{{ t('design.footerNote') }}</p></div><nav class="legal-links"><a href="/legal">{{ t('footer.legal') }}</a><a href="/privacy">{{ t('footer.privacy') }}</a></nav></div><div class="footer-bottom"><span>PayPal Delight AI · Hackathon 2026</span><span>{{ t(labPage ? (store?.gifts.isDemo === false ? 'lab.aiFooter' : 'lab.mockFooter') : (store?.gifts.isDemo === false ? 'gift.aiShort' : 'design.demoShort')) }}</span><span>{{ t('footer.smile') }} <span aria-hidden="true">✳</span></span></div></footer>
+    <footer><div class="footer-top"><div><span class="footer-brand">{{ t('footer.brand') }}<AppIcon /></span><p>{{ t('design.footerNote') }}</p></div><nav class="legal-links"><a href="/legal">{{ t('footer.legal') }}</a><a href="/privacy">{{ t('footer.privacy') }}</a></nav></div><div class="footer-bottom"><span>Museum Puzzles · Delight AI · Hackathon 2026</span><span>{{ t(labPage ? (store?.gifts.isDemo === false ? 'lab.aiFooter' : 'lab.mockFooter') : (store?.gifts.isDemo === false ? 'gift.aiShort' : 'design.demoShort')) }}</span><span>{{ t('footer.smile') }} <span aria-hidden="true">✳</span></span></div></footer>
   </div>
 </template>
