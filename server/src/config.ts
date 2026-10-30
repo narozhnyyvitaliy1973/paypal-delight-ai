@@ -58,6 +58,14 @@ export function readSettings(env: NodeJS.ProcessEnv = process.env) {
   }
   const production = env.NODE_ENV === "production";
   const rawOrigin = env.APP_ORIGIN ?? "http://127.0.0.1:5173";
+  const additionalOrigins = env.APP_ADDITIONAL_ORIGINS?.split(',').map(value => value.trim()) ?? [];
+  const allowedOrigins = [...new Set([rawOrigin, ...additionalOrigins])];
+  for (const value of allowedOrigins) {
+    const parsed = new URL(value);
+    if (parsed.origin !== value || parsed.username || parsed.password ||
+        !['http:', 'https:'].includes(parsed.protocol) || (production && parsed.protocol !== 'https:'))
+      throw new Error('Configured origins must be exact origins without paths; production requires HTTPS.');
+  }
   const origin = new URL(rawOrigin);
   if (
     origin.origin !== rawOrigin ||
@@ -96,6 +104,7 @@ export function readSettings(env: NodeJS.ProcessEnv = process.env) {
     lab: { enabled: labEnabled, proxyToken: labProxyToken },
     production,
     origin: origin.origin,
+    allowedOrigins,
     databasePath,
     clientId,
     clientSecret,

@@ -96,7 +96,7 @@ export function buildApp(
       reply.header("X-Content-Type-Options", "nosniff");
       reply.header("Referrer-Policy", "same-origin");
       if (request.method === "POST") {
-        if (request.headers.origin !== settings.origin)
+        if (!settings.allowedOrigins.includes(request.headers.origin ?? ''))
           throw new AppError(
             403,
             "ORIGIN_REJECTED",
@@ -212,6 +212,7 @@ export function buildApp(
           owner(request),
           request.body.productId,
           request.body.requestId,
+          request.headers.origin,
         ),
     );
     app.get('/api/orders', async request => store.purchases(owner(request)));

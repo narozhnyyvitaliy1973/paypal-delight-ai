@@ -11,7 +11,7 @@ export function object(value: unknown): JsonObject {
     : {};
 }
 export interface PayPalGateway {
-  create(order: Order): Promise<unknown>;
+  create(order: Order, origin?: string): Promise<unknown>;
   get(id: string): Promise<unknown>;
   capture(id: string, requestId: string): Promise<unknown>;
 }
@@ -125,7 +125,7 @@ export class PayPalClient implements PayPalGateway {
     }
     throw new PayPalError(502);
   }
-  create(order: Order) {
+  create(order: Order, origin = this.origin) {
     const amount = { currency_code: "EUR", value: money(order.amount_minor) };
     return this.request(
       "/v2/checkout/orders",
@@ -157,8 +157,8 @@ export class PayPalClient implements PayPalGateway {
               shipping_preference: "NO_SHIPPING",
               user_action: "PAY_NOW",
               payment_method_preference: "IMMEDIATE_PAYMENT_REQUIRED",
-              return_url: `${this.origin}/?order=${order.id}`,
-              cancel_url: `${this.origin}/?order=${order.id}&cancelled=1`,
+              return_url: `${origin}/?order=${order.id}`,
+              cancel_url: `${origin}/?order=${order.id}&cancelled=1`,
             },
           },
         },

@@ -61,7 +61,7 @@ export class Checkout {
       this.store.release(id, token);
     }
   }
-  async create(owner: string, productId: string, requestId: string) {
+  async create(owner: string, productId: string, requestId: string, origin?: string) {
     const product = products.find((item) => item.id === productId);
     if (!product)
       throw new AppError(
@@ -79,7 +79,7 @@ export class Checkout {
           "ORDER_EXPIRED",
           "This checkout attempt expired. Start a new purchase.",
         );
-      const data = await this.paypal.create(order);
+      const data = await this.paypal.create(order, origin);
       const result = validateOrder(data, order, true);
       if (
         !["CREATED", "PAYER_ACTION_REQUIRED", "APPROVED"].includes(
