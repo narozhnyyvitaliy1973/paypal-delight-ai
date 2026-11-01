@@ -5,13 +5,27 @@ import { validateGiftParameters, type GiftProvider, type GiftRequest, type GiftR
 import { AI_IMAGE_SIZE, giftPrompt } from './prompts.js';
 
 export interface CloudflareFailure {
-  mode: GiftRequest['type']; providerStatus: number; providerCodes: number[];
+  mode: GiftRequest['type']; providerStatus: number; providerCodes: number[]; providerMessages: string[];
   rayId?: string; promptCharacters: number; durationMs: number;
 }
 
-// Inspect only a small error envelope. Never log provider messages or request data.
-async function errorCodes(response: Response): Promise<number[]> {
-  if (!response.body) return [];
+// Keep technical error descriptions, stripping echoed input, credentials and quoted values.
+function safeErrorMessage(message: string, privateValues: string[]): string {
+  for (const value of privateValues.filter(Boolean).sort((a, b) => b.length - a.length)) {
+    message = message.split(value).join('[redacted]');
+    message = message.split(JSON.stringify(value).slice(1, -1)).join('[redacted]');
+  }
+  return message
+    .replace(/\b(?:input_value|authorization|api[_ -]?token)\s*[:=][^\r\n]*/gi, '[input omitted]')
+    .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '[quoted value]')
+    .replace(/https?:\/\/\S+/gi, '[url]')
+    .replace(/[A-Za-z0-9+/_=-]{64,}/g, '[encoded value]')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 1000);
+}
+
+async function errorDetails(response: Response, privateValues: string[]): Promise<Pick<CloudflareFailure, 'providerCodes' | 'providerMessages'>> {
+  const empty = { providerCodes: [], providerMessages: [] };
+  if (!response.body) return empty;
   const reader = response.body.getReader();
   const timer = setTimeout(() => { void reader.cancel().catch(() => {}); }, 1000);
   try {
@@ -21,13 +35,17 @@ async function errorCodes(response: Response): Promise<number[]> {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.length;
-      if (size > 16_384) return [];
+      if (size > 16_384) return empty;
       chunks.push(value);
     }
     const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    return Array.isArray(data.errors)
-      ? data.errors.slice(0, 8).map((entry: { code?: unknown }) => entry?.code).filter((code: unknown): code is number => Number.isSafeInteger(code)) : [];
-  } catch { return []; }
+    const errors: { code?: unknown; message?: unknown }[] = Array.isArray(data.errors) ? data.errors.slice(0, 8) : [];
+    return {
+      providerCodes: errors.map(entry => entry?.code).filter((code): code is number => Number.isSafeInteger(code)),
+      providerMessages: errors.map(entry => entry?.message).filter((message): message is string => typeof message === 'string')
+        .map(message => safeErrorMessage(message, privateValues)),
+    };
+  } catch { return empty; }
   finally { clearTimeout(timer); await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
@@ -71,7 +89,9 @@ export class CloudflareGiftProvider implements GiftProvider {
         });
         if (!response.ok) {
           const rayId = response.headers.get('cf-ray') ?? '';
-          this.audit({ mode: request.type, providerStatus: response.status, providerCodes: await errorCodes(response),
+          const details = await errorDetails(response, [this.settings.apiToken, this.settings.accountId, prompt,
+            request.wishes, request.recipientName ?? '', request.characterName ?? '', request.occasion ?? '']);
+          this.audit({ mode: request.type, providerStatus: response.status, ...details,
             ...(/^[a-f0-9]{16,32}(?:-[A-Z]{3})?$/.test(rayId) ? { rayId } : {}),
             promptCharacters: prompt.length, durationMs: Date.now() - started });
         }
