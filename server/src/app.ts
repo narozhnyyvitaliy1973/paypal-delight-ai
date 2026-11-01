@@ -52,7 +52,8 @@ export function buildApp(
   dependencies: Dependencies = {},
 ) {
   const settings = dependencies.settings ?? readSettings();
-  const giftProvider = dependencies.giftProvider ?? createGiftProvider(settings.aiProvider, settings.ai);
+  const giftProvider = dependencies.giftProvider ?? createGiftProvider(settings.aiProvider, settings.ai,
+    event => app.log.warn(event, 'Cloudflare image request failed'));
   const store = dependencies.store ?? new OrderStore(settings.databasePath);
   const paypal =
     dependencies.paypal ??

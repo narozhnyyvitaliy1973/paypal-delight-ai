@@ -62,8 +62,9 @@ async function refresh() {
     const order = await (props.transport?.read() ?? api<GiftView>(`/orders/${props.order.id}/gift`));
     if (disposed) return;
     emit('update', order);
-    error.value = '';
-    if (order.gift?.status === 'AVAILABLE') { form.value = true; error.value = 'errors.GIFT_RETRY'; }
+    // AVAILABLE also follows a provider rejection; it does not prove a timeout.
+    if (order.gift?.status === 'AVAILABLE') { form.value = true; }
+    else { error.value = ''; }
     if (order.gift?.status === 'GENERATING') poll = setTimeout(() => void refresh(), 1500);
   } catch (cause) { if (!disposed) error.value = props.lab && cause instanceof ApiError && cause.code === 'NETWORK_ERROR' ? 'errors.AI_LAB_NETWORK' : errorKey(cause); }
 }

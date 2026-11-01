@@ -4,6 +4,33 @@ import { CLOUDFLARE_MODEL, type AiSettings } from '../config.js';
 import { validateGiftParameters, type GiftProvider, type GiftRequest, type GiftResult } from './provider.js';
 import { AI_IMAGE_SIZE, giftPrompt } from './prompts.js';
 
+export interface CloudflareFailure {
+  mode: GiftRequest['type']; providerStatus: number; providerCodes: number[];
+  rayId?: string; promptCharacters: number; durationMs: number;
+}
+
+// Inspect only a small error envelope. Never log provider messages or request data.
+async function errorCodes(response: Response): Promise<number[]> {
+  if (!response.body) return [];
+  const reader = response.body.getReader();
+  const timer = setTimeout(() => { void reader.cancel().catch(() => {}); }, 1000);
+  try {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > 16_384) return [];
+      chunks.push(value);
+    }
+    const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return Array.isArray(data.errors)
+      ? data.errors.slice(0, 8).map((entry: { code?: unknown }) => entry?.code).filter((code: unknown): code is number => Number.isSafeInteger(code)) : [];
+  } catch { return []; }
+  finally { clearTimeout(timer); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
+
 export class AiOutcomeUnknown extends AppError {
   constructor() { super(503, 'AI_REVIEW_REQUIRED', 'The AI outcome is uncertain. Your gift right is held for operator review; no automatic retry will run.'); }
 }
@@ -15,7 +42,8 @@ export class AiRejected extends AppError {
 
 export class CloudflareGiftProvider implements GiftProvider {
   readonly name = 'cloudflare' as const;
-  constructor(private settings: AiSettings, private fetcher: typeof fetch = fetch) {}
+  constructor(private settings: AiSettings, private fetcher: typeof fetch = fetch,
+    private audit: (event: CloudflareFailure) => void = () => {}) {}
 
   async generate(request: GiftRequest): Promise<GiftResult> {
     if (!this.settings.enabled) throw new AiRejected('AI_DISABLED');
@@ -25,11 +53,13 @@ export class CloudflareGiftProvider implements GiftProvider {
     if (request.photo && (request.photo.width >= 512 || request.photo.height >= 512))
       throw new AiRejected('PHOTO_INVALID', 400);
     const form = new FormData();
-    form.set('prompt', giftPrompt(request));
+    const prompt = giftPrompt(request);
+    form.set('prompt', prompt);
     form.set('width', String(AI_IMAGE_SIZE));
     form.set('height', String(AI_IMAGE_SIZE));
     if (request.photo) form.set('input_image_0', new Blob([new Uint8Array(request.photo.bytes)], { type: 'image/png' }), 'reference.png');
     const controller = new AbortController();
+    const started = Date.now();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       // One request, no retries, redirects or AI Gateway/paid-provider fallbacks.
@@ -39,11 +69,16 @@ export class CloudflareGiftProvider implements GiftProvider {
           body: form, signal: controller.signal, redirect: 'error',
           // fetch supplies multipart/form-data AND its boundary.
         });
+        if (!response.ok) {
+          const rayId = response.headers.get('cf-ray') ?? '';
+          this.audit({ mode: request.type, providerStatus: response.status, providerCodes: await errorCodes(response),
+            ...(/^[a-f0-9]{16,32}(?:-[A-Z]{3})?$/.test(rayId) ? { rayId } : {}),
+            promptCharacters: prompt.length, durationMs: Date.now() - started });
+        }
         if ([400, 401, 403, 413, 422, 429].includes(response.status)) {
-          await response.body?.cancel();
           throw new AiRejected(response.status === 429 ? 'AI_PROVIDER_LIMIT' : 'AI_REJECTED', response.status === 429 ? 429 : 503);
         }
-        if (!response.ok) { await response.body?.cancel(); throw new AiOutcomeUnknown(); }
+        if (!response.ok) throw new AiOutcomeUnknown();
         // Bound the response even when Content-Length is absent or dishonest.
         if (!response.body || Number(response.headers.get('content-length')) > 16 * 1024 * 1024) {
           await response.body?.cancel(); throw new AiOutcomeUnknown();

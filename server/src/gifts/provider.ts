@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { AppError } from '../errors.js';
 import type { PreparedPhoto } from './photo.js';
 import type { AiSettings } from '../config.js';
-import { CloudflareGiftProvider } from './cloudflare.js';
+import { CloudflareGiftProvider, type CloudflareFailure } from './cloudflare.js';
 
 export type GiftType = 'caricature' | 'greeting-card' | 'mini-comic';
 export type GiftLanguage = 'en' | 'de';
@@ -75,11 +75,11 @@ export class MockGiftProvider implements GiftProvider {
   }
 }
 
-export function createGiftProvider(name: ProviderName, settings?: AiSettings): GiftProvider {
+export function createGiftProvider(name: ProviderName, settings?: AiSettings, audit?: (event: CloudflareFailure) => void): GiftProvider {
   if (name === 'mock') return new MockGiftProvider();
   if (name === 'cloudflare') {
     if (!settings) throw new Error('Cloudflare settings are required.');
-    return new CloudflareGiftProvider(settings);
+    return new CloudflareGiftProvider(settings, undefined, audit);
   }
   // A deliberate stop, never a silent fallback or a paid API call.
   throw new Error('AI_PROVIDER=openai is not implemented. Use AI_PROVIDER=mock.');
