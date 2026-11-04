@@ -30,7 +30,12 @@ export interface GiftResult {
 }
 export interface GiftProvider {
   readonly name: ProviderName;
-  generate(request: GiftRequest): Promise<GiftResult>;
+  generate(request: GiftRequest, context?: GiftGenerationContext): Promise<GiftResult>;
+}
+export interface GiftGenerationContext {
+  operationId: string;
+  // Server-only, synchronous durable reservation before the single fallback dispatch.
+  beforeFallback: () => void;
 }
 
 export function validateGiftParameters(input: GiftParameters & { photo?: unknown }) {

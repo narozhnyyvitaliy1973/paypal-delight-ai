@@ -3,7 +3,7 @@ import { OrderStore } from '../database.js';
 import { AppError } from '../errors.js';
 import { validateGiftParameters, type GiftProvider, type GiftResult } from './provider.js';
 import { readAiSettings, AI_GENERATION_LEASE_MS, type AiSettings } from '../config.js';
-import { reserveAiAttempt } from './limits.js';
+import { reserveAiAttempt, reserveAiFallback } from './limits.js';
 import { AiOutcomeUnknown, AiRejected } from './cloudflare.js';
 import { renderGift, type CreateGift } from './render.js';
 export type { CreateGift } from './render.js';
@@ -37,7 +37,7 @@ export class Gifts {
           reserveAiAttempt(this.store.db, this.ai, token, id, owner, input.type, hasPhoto);
           aiDispatched = true;
         }
-      });
+      }, { operationId: token, beforeFallback: () => reserveAiFallback(this.store.db, this.ai, owner, token, 'gift') });
       this.save(id, token, result);
       if (aiDispatched) this.audit({ orderId: id, mode: input.type, durationMs: Date.now() - started, outcome: 'COMPLETED' });
       return this.read(owner, id);

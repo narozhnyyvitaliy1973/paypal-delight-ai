@@ -5,7 +5,7 @@ import { products } from '../catalog.js';
 import type { GiftProvider, GiftType } from './provider.js';
 import { validateGiftParameters } from './provider.js';
 import { renderGift, type CreateGift } from './render.js';
-import { checkAiBudget, expireAiAttempts } from './limits.js';
+import { checkAiBudget, expireAiAttempts, reserveAiFallback } from './limits.js';
 import { AiRejected } from './cloudflare.js';
 
 interface Run {
@@ -59,7 +59,7 @@ export class AiLab {
             .run(id, owner, product.id, input.type, input.language, now, now + AI_GENERATION_LEASE_MS, cost);
           reserved = true;
         }).immediate();
-      });
+      }, { operationId: id, beforeFallback: () => reserveAiFallback(this.store.db, this.settings, owner, id, 'lab') });
       const metadata = JSON.stringify({ type: result.type, language: result.language, provider: result.provider, isDemo: result.isDemo,
         text: result.text, width: result.image.width, height: result.image.height, createdAt: Date.now() });
       const saved = this.store.db.prepare("UPDATE ai_lab_runs SET status = 'COMPLETED', finished_at = ?, result_json = ?, image = ? WHERE id = ? AND status = 'STARTED' AND deadline > ?")

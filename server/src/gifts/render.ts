@@ -2,7 +2,7 @@ import { AppError } from '../errors.js';
 import { AI_RENDER_TIMEOUT_MS } from '../config.js';
 import { products } from '../catalog.js';
 import { withPreparedPhoto, PHOTO_MAX_BYTES } from './photo.js';
-import { validateGiftParameters, type GiftParameters, type GiftProvider, type GiftRequest } from './provider.js';
+import { validateGiftParameters, type GiftParameters, type GiftProvider, type GiftRequest, type GiftGenerationContext } from './provider.js';
 import { brandGiftImage } from './branding.js';
 import { letterGiftImage } from './lettering.js';
 
@@ -11,7 +11,7 @@ export interface CreateGift extends GiftParameters {
 }
 
 // Identical consent, image cleaning, prompting, lettering and branding for purchases and the private lab.
-export async function renderGift(provider: GiftProvider, input: CreateGift, selectedProduct: GiftRequest['product'], beforeGenerate: (hasPhoto: boolean) => void) {
+export async function renderGift(provider: GiftProvider, input: CreateGift, selectedProduct: GiftRequest['product'], beforeGenerate: (hasPhoto: boolean) => void, context?: GiftGenerationContext) {
   validateGiftParameters(input);
   if (input.photo && input.photo.consent !== true)
     throw new AppError(400, 'PHOTO_CONSENT_REQUIRED', 'Separate photo consent is required.');
@@ -29,7 +29,7 @@ export async function renderGift(provider: GiftProvider, input: CreateGift, sele
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       beforeGenerate(Boolean(photo));
-      return await Promise.race([provider.generate({ ...request, photo }),
+      return await Promise.race([provider.generate({ ...request, photo }, context),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Gift timeout')), AI_RENDER_TIMEOUT_MS); })]);
     } finally { clearTimeout(timer); }
   });

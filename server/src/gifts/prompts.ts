@@ -3,6 +3,26 @@ import { products } from '../catalog.js';
 
 // Fixed output size bounds both cost and decoding work. A comic is ONE image request.
 export const AI_IMAGE_SIZE = 512;
+export const PHOENIX_MODEL = '@cf/leonardo/phoenix-1.0';
+export const PHOENIX_STEPS = 25;
+// https://developers.cloudflare.com/workers-ai/platform/pricing/
+// 530 neurons/output tile + 10/step, with the same 25% budget headroom.
+export const PHOENIX_ESTIMATED_NEURONS = Math.ceil((530 + 10 * PHOENIX_STEPS) * 1.25);
+
+export function safeComicFallbackPrompt(request: GiftRequest): string | undefined {
+  const puzzle = products.find(p => p.id === request.product.id);
+  if (!puzzle) return undefined;
+  // Only trusted catalogue data. Never reuse rejected wishes, names or uploads.
+  return [
+    'A cheerful, family-friendly illustrated comic with exactly four panels in a 2x2 grid and clear gutters.',
+    `Art jigsaw puzzle: ${puzzle.name}. ${puzzle.description}`,
+    'The same fully clothed fictional grown-up puzzle enthusiast appears in all four panels.',
+    'Panel 1: discovers the puzzle box. Panel 2: happily assembles the puzzle at a table.',
+    'Panel 3: playfully looks for the final piece among the puzzle pieces. Panel 4: finds it, finishes the puzzle and smiles.',
+    'Show the artwork on the puzzle box and interlocking pieces. Keep its colours and motifs consistent.',
+    'Warm gentle humour. No text, captions, speech bubbles, logos or watermarks.',
+  ].join('\n');
+}
 export function estimatedNeurons(hasPhoto: boolean) {
   // Cloudflare 2026-10-26: 26.05/output tile, 5.37/input tile (512x512).
   // Keep the existing four-tile reservation conservatively at 512px, plus a reference tile and 25% headroom.

@@ -2,7 +2,8 @@ import type Database from 'better-sqlite3';
 import { AppError } from '../errors.js';
 import { AI_GENERATION_LEASE_MS, type AiSettings } from '../config.js';
 import type { GiftType } from './provider.js';
-import { estimatedNeurons } from './prompts.js';
+import { estimatedNeurons, PHOENIX_ESTIMATED_NEURONS } from './prompts.js';
+import { AiOutcomeUnknown, AiRejected } from './cloudflare.js';
 
 export function expireAiAttempts(db: Database.Database, now = Date.now()) {
   db.prepare("UPDATE ai_attempts SET status = 'UNCERTAIN', finished_at = ? WHERE status = 'STARTED' AND deadline <= ?").run(now, now);
@@ -43,6 +44,28 @@ export function reserveAiAttempt(db: Database.Database, settings: AiSettings, id
     // Reserve before dispatch; failures/uncertainty count too. Never refund automatically.
     db.prepare("INSERT INTO ai_attempts (id, order_id, mode, status, started_at, deadline, estimated_neurons) VALUES (?, ?, ?, 'STARTED', ?, ?, ?)")
       .run(id, orderId, mode, now, now + AI_GENERATION_LEASE_MS, cost);
+  }).immediate();
+}
+
+// Add cost to the existing process, without releasing its lock or creating a second gift.
+export function reserveAiFallback(db: Database.Database, settings: AiSettings, owner: string, id: string, kind: 'gift' | 'lab') {
+  db.transaction(() => {
+    if (!settings.enabled) throw new AiRejected('AI_DISABLED');
+    const now = Date.now();
+    const table = kind === 'gift' ? 'ai_attempts' : 'ai_lab_runs';
+    const active = kind === 'gift'
+      ? db.prepare(`SELECT a.estimated_neurons FROM ai_attempts a JOIN orders o ON o.id = a.order_id
+          JOIN gift_entitlements g ON g.order_id = a.order_id WHERE a.id = ? AND o.owner_hash = ?
+          AND a.mode = 'mini-comic' AND a.status = 'STARTED' AND a.deadline > ?
+          AND g.status = 'RESERVED' AND g.lock_token = a.id AND g.lock_until > ?`).get(id, owner, now, now)
+      : db.prepare(`SELECT estimated_neurons FROM ai_lab_runs WHERE id = ? AND owner_hash = ?
+          AND mode = 'mini-comic' AND status = 'STARTED' AND deadline > ?`).get(id, owner, now);
+    // Cost comparison also prevents charging or dispatching fallback twice for this process.
+    if (!active || (active as { estimated_neurons: number }).estimated_neurons !== estimatedNeurons(false)) throw new AiOutcomeUnknown();
+    if (aiUsage(db, owner, now).neurons + PHOENIX_ESTIMATED_NEURONS > settings.dailyNeurons)
+      throw new AiRejected('AI_DAILY_LIMIT', 429);
+    db.prepare(`UPDATE ${table} SET estimated_neurons = estimated_neurons + ? WHERE id = ?`)
+      .run(PHOENIX_ESTIMATED_NEURONS, id);
   }).immediate();
 }
 

@@ -11,11 +11,12 @@ import { fixture } from './helpers.mjs';
 import { FakeCloudflare, giftInputs, aiSettings } from './cloudflare-helpers.mjs';
 import { readSettings, readAiSettings } from '../dist/config.js';
 import { products } from '../dist/catalog.js';
-import { CloudflareGiftProvider } from '../dist/gifts/cloudflare.js';
+import { CloudflareGiftProvider, AiOutcomeUnknown } from '../dist/gifts/cloudflare.js';
 import { letterGiftImage, plainText } from '../dist/gifts/lettering.js';
 import { brandGiftImage } from '../dist/gifts/branding.js';
-import { giftPrompt, estimatedNeurons, comicStory } from '../dist/gifts/prompts.js';
-import { releaseReviewedAttempt } from '../dist/gifts/limits.js';
+import { giftPrompt, estimatedNeurons, comicStory, PHOENIX_MODEL, PHOENIX_ESTIMATED_NEURONS } from '../dist/gifts/prompts.js';
+import { releaseReviewedAttempt, reserveAiFallback } from '../dist/gifts/limits.js';
+import { AiLab } from '../dist/gifts/lab.js';
 import { Gifts } from '../dist/gifts/service.js';
 import { assertBrandedPng, saveLegacyGift } from './image-assertions.mjs';
 import { MockGiftProvider } from '../dist/gifts/provider.js';
@@ -31,6 +32,97 @@ const paid = f => {
   return order;
 };
 const create = (f, order, body = giftInputs.caricature) => f.send(`/orders/${order.id}/gift`, body);
+
+test('Primary/fallback: one locked gift, safe Phoenix JSON, binary JPEG to branded PNG and replay', async t => {
+  const ai = aiSettings(); const calls = []; const events = [];
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { release = resolve; }); t.after(() => release());
+  const provider = new CloudflareGiftProvider(ai, async (url, init) => {
+    calls.push(url);
+    if (calls.length === 1) return new Response(JSON.stringify({ errors: [{ code: 3030, message: 'Your output has been flagged' }] }), { status: 400 });
+    assert.ok(url.endsWith(PHOENIX_MODEL));
+    assert.equal(init.headers['Content-Type'], 'application/json');
+    const body = JSON.parse(init.body);
+    assert.equal(body.width, 512); assert.equal(body.height, 512); assert.equal(body.num_steps, 25);
+    assert.match(body.prompt, /Starry Night Puzzle/); assert.match(body.prompt, /four panels/);
+    assert.ok(!body.prompt.includes('PRIVATE-WISHES')); assert.ok(!body.prompt.includes('PRIVATE-NAME'));
+    assert.equal(body.seed, undefined); assert.equal(body.input_image_0, undefined);
+    entered(); await gate;
+    return new Response(await sharp(await new FakeCloudflare().image()).jpeg().toBuffer(), { headers: { 'Content-Type': 'image/jpeg' } });
+  }, event => events.push(event));
+  const f = await fixture(t, { settings: { aiProvider: 'cloudflare', ai }, giftProvider: provider }); const order = paid(f);
+  const input = { ...giftInputs['mini-comic'], wishes: 'PRIVATE-WISHES', characterName: 'PRIVATE-NAME' };
+  const first = create(f, order, input); await started;
+  const row = f.store.db.prepare('SELECT * FROM ai_attempts').get();
+  assert.equal(row.estimated_neurons, 131 + PHOENIX_ESTIMATED_NEURONS);
+  assert.throws(() => reserveAiFallback(f.store.db, ai, owner(f), row.id, 'gift'), AiOutcomeUnknown);
+  await Promise.all([create(f, order, input), create(f, order, input)]);
+  assert.equal(calls.length, 2); assert.equal(f.store.gift(order.id).status, 'GENERATING');
+  release(); const response = await first;
+  assert.equal(response.statusCode, 200, response.body); assert.equal(response.json().gift.status, 'COMPLETED');
+  const image = await f.get(`/orders/${order.id}/gift/image`); const metadata = await sharp(image.rawPayload).metadata();
+  assert.equal(metadata.format, 'png'); assert.equal(metadata.width, 512); assert.ok(metadata.height > 512);
+  assert.deepEqual((await f.get(`/orders/${order.id}/gift/download`)).rawPayload, image.rawPayload);
+  await create(f, order, giftInputs['greeting-card']); assert.equal(calls.length, 2);
+  assert.equal(f.store.db.prepare('SELECT COUNT(*) n FROM gift_images').get().n, 1);
+  assert.equal(events.length, 2); assert.equal(events[0].fallback, false); assert.equal(events[0].providerStatus, 400);
+  assert.deepEqual(events[0].providerCodes, [3030]); assert.equal(events[1].fallback, true);
+  assert.equal(events[1].model, PHOENIX_MODEL); assert.equal(events[1].outcome, 'COMPLETED');
+  assert.equal(events[0].operationId, row.id); assert.equal(events[1].operationId, row.id);
+  assert.ok(!JSON.stringify(events).includes('PRIVATE-')); assert.equal(f.sandbox.calls.length, 0);
+});
+
+test('Primary/fallback: quota, invalid inputs, other modes and uncertain outcomes never trigger Phoenix', async () => {
+  const success = new FakeCloudflare();
+  await new CloudflareGiftProvider(aiSettings(), success.fetch).generate(
+    { ...giftInputs['mini-comic'], product: products[0] }, { operationId: 'success', beforeFallback: () => assert.fail('No fallback after success') });
+  assert.equal(success.calls.length, 1);
+  for (const [status, codes, input] of [
+    [429, [3036], giftInputs['mini-comic']], [400, [5004], giftInputs['mini-comic']],
+    [400, [3030, 3036], giftInputs['mini-comic']], [503, [], giftInputs['mini-comic']],
+    [400, [3030], giftInputs.caricature], [400, [3030], giftInputs['greeting-card']],
+  ]) {
+    let calls = 0, reservations = 0;
+    const provider = new CloudflareGiftProvider(aiSettings(), async () => {
+      calls++; return new Response(JSON.stringify({ errors: codes.map(code => ({ code })) }), { status });
+    });
+    await assert.rejects(provider.generate({ ...input, product: products[0] }, { operationId: 'test', beforeFallback: () => { reservations++; } }));
+    assert.equal(calls, 1); assert.equal(reservations, 0);
+  }
+  const cf = new FakeCloudflare(); cf.hang = true;
+  await assert.rejects(new CloudflareGiftProvider(aiSettings({ timeoutMs: 20 }), cf.fetch).generate(
+    { ...giftInputs['mini-comic'], product: products[0] }, { operationId: 'timeout', beforeFallback: () => assert.fail('No fallback after timeout') }), AiOutcomeUnknown);
+  assert.equal(cf.calls.length, 1);
+  await assert.rejects(new CloudflareGiftProvider(aiSettings(), () => assert.fail('Invalid photo must not dispatch')).generate(
+    { ...giftInputs['mini-comic'], product: products[0], photo: {} }), { code: 'GIFT_PERSONALIZATION_INVALID' });
+});
+
+test('Primary/fallback: rejected models release right, insufficient budget blocks dispatch, lab uses same reservation', async t => {
+  for (const dailyNeurons of [8000, 1105]) {
+    const ai = aiSettings({ dailyNeurons }); let calls = 0;
+    const provider = new CloudflareGiftProvider(ai, async () => {
+      calls++; return new Response(JSON.stringify({ errors: [{ code: 3030 }] }), { status: 400 });
+    });
+    const f = await fixture(t, { settings: { aiProvider: 'cloudflare', ai }, giftProvider: provider }); const order = paid(f);
+    await create(f, order, giftInputs['mini-comic']);
+    assert.equal(calls, dailyNeurons === 8000 ? 2 : 1); assert.equal(f.store.gift(order.id).status, 'AVAILABLE');
+    const attempt = f.store.db.prepare('SELECT * FROM ai_attempts').get();
+    assert.equal(attempt.status, 'REJECTED'); assert.equal(attempt.estimated_neurons, dailyNeurons === 8000 ? 1106 : 131);
+    assert.equal(f.store.db.prepare('SELECT COUNT(*) n FROM gift_images').get().n, 0);
+  }
+  const ai = aiSettings(); let calls = 0;
+  const provider = new CloudflareGiftProvider(ai, async () => ++calls === 1
+    ? new Response(JSON.stringify({ errors: [{ code: 3040 }] }), { status: 429 })
+    : new Response(await new FakeCloudflare().image()));
+  const f = await fixture(t, { settings: { aiProvider: 'cloudflare', ai }, giftProvider: provider });
+  const lab = new AiLab(f.store, provider, ai); const id = randomUUID();
+  const result = await lab.create(owner(f), id, products[1].id, giftInputs['mini-comic']);
+  assert.equal(result.status, 'COMPLETED'); assert.equal(calls, 2);
+  assert.equal(f.store.db.prepare('SELECT estimated_neurons n FROM ai_lab_runs').get().n, 1106);
+  assert.equal(lab.image(owner(f), id).bytes[0], 137);
+  await lab.create(owner(f), id, products[1].id, giftInputs['mini-comic']); assert.equal(calls, 2);
+});
 
 test('Cloudflare is opt-in, model and budgets are bounded, invalid config fails closed', () => {
   const settings = readSettings({});
